@@ -1,7 +1,6 @@
 mod cli;
 mod config;
 mod core;
-mod install;
 mod notify;
 mod tmux;
 

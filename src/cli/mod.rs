@@ -5,11 +5,9 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use commands::debug::DebugCommand;
 use commands::focus_reset::FocusResetCommand;
-use commands::install::InstallCommand;
 use commands::opencode_event::OpenCodeEventCommand;
 use commands::pane_status::PaneStatusCommand;
 use commands::state::StateCommand;
-use commands::uninstall::UninstallCommand;
 use commands::window_status::WindowStatusCommand;
 
 #[derive(Debug, Parser)]
@@ -31,8 +29,6 @@ enum Commands {
     PaneStatus(PaneStatusCommand),
     Debug(DebugCommand),
     WindowStatus(WindowStatusCommand),
-    Install(InstallCommand),
-    Uninstall(UninstallCommand),
 }
 
 impl Cli {
@@ -44,8 +40,6 @@ impl Cli {
             Commands::PaneStatus(cmd) => cmd.run(),
             Commands::Debug(cmd) => cmd.run(),
             Commands::WindowStatus(cmd) => cmd.run(),
-            Commands::Install(cmd) => cmd.run(),
-            Commands::Uninstall(cmd) => cmd.run(),
         }
     }
 }
