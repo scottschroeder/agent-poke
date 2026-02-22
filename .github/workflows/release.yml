@@ -1,0 +1,135 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+
+jobs:
+    verify-ci:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            actions: read
+        outputs:
+            tag: ${{ steps.tag.outputs.tag }}
+            version: ${{ steps.tag.outputs.version }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Resolve and validate tag
+              id: tag
+              run: |
+                  tag="${GITHUB_REF#refs/tags/}"
+                  if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                    echo "tag=$tag" >> "$GITHUB_OUTPUT"
+                    echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "Tag '$tag' must match vX.Y.Z"
+                    exit 1
+                  fi
+
+            - name: Find CI run for tag commit
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  sha=$(git rev-list -n 1 "${{ steps.tag.outputs.tag }}")
+                  echo "Looking for CI run for $sha"
+                  for i in $(seq 1 40); do
+                    run_json=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?per_page=100" \
+                      --jq "[.workflow_runs[] | select(.head_sha == \"$sha\")][0]")
+                    run_id=$(echo "$run_json" | jq -r '.id // empty')
+                    if [ -n "$run_id" ]; then
+                      status=$(echo "$run_json" | jq -r '.status')
+                      conclusion=$(echo "$run_json" | jq -r '.conclusion')
+                      if [ "$status" = "completed" ]; then
+                        if [ "$conclusion" = "success" ]; then
+                          exit 0
+                        fi
+                        echo "CI run $run_id completed with $conclusion"
+                        exit 1
+                      fi
+                    fi
+                    sleep 15
+                  done
+                  echo "Timed out waiting for CI run for $sha"
+                  exit 1
+
+    build:
+        needs: verify-ci
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                    - os: macos-latest
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.verify-ci.outputs.tag }}
+
+            - uses: ./.github/actions/setup
+
+            - name: Build release binary
+              run: cargo build --release
+
+            - name: Package release tarball
+              shell: bash
+              run: |
+                  target=$(rustc -vV | awk '/host:/{print $2}')
+                  version="${{ needs.verify-ci.outputs.version }}"
+                  bundle_dir="agent-poke-${version}-${target}"
+
+                  rm -rf dist
+                  mkdir -p "dist/${bundle_dir}"
+
+                  cp target/release/agent-poke "dist/${bundle_dir}/"
+                  cp README.md LICENSE "dist/${bundle_dir}/"
+
+                  tarball="agent-poke-${version}-${target}.tar.gz"
+                  tar -C dist -czf "$tarball" "$bundle_dir"
+                  echo "$tarball" > tarball.txt
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.os }}-release
+                  path: |
+                      *.tar.gz
+
+    publish:
+        needs:
+            - verify-ci
+            - build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  path: release-artifacts
+
+            - name: Collect artifacts
+              run: |
+                  mkdir -p release-assets
+                  find release-artifacts -name '*.tar.gz' -exec cp {} release-assets/ \;
+                  ls -1 release-assets
+
+            - name: Generate checksums
+              run: |
+                  cd release-assets
+                  sha256sum *.tar.gz > sha256sums.txt
+
+            - name: Create release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  tag="${{ needs.verify-ci.outputs.tag }}"
+                  gh release create "$tag" \
+                    --title "$tag" \
+                    --draft \
+                    release-assets/*.tar.gz \
+                    release-assets/sha256sums.txt

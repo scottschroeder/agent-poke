@@ -1,0 +1,14 @@
+# status segment
+set -g @agent-poke-bin "$HOME/.cargo/bin/agent-poke"
+
+# minimal: prefix each window label with state glyph
+set -g window-status-format '#(#{@agent-poke-bin} window-status --window "#{window_id}" 2>/dev/null) #I:#W#{?window_flags,#{window_flags},}'
+set -g window-status-current-format '#(#{@agent-poke-bin} window-status --window "#{window_id}" 2>/dev/null) #I:#W#{?window_flags,#{window_flags},}'
+
+# defaults for window-status glyphs are:
+# running 🔄, needs-input ⏸️, done ✅
+
+# focus hooks to clear deferred done/needs-input styling
+set-hook -ag pane-focus-in 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
+set-hook -ag after-select-window 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
+set-hook -ag after-select-pane 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'

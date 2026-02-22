@@ -1,0 +1,13 @@
+name: setup
+description: Common CI setup
+
+runs:
+    using: composite
+    steps:
+        - name: Set up Rust
+          uses: dtolnay/rust-toolchain@stable
+
+        - name: Cache Rust artifacts
+          uses: Swatinem/rust-cache@v2
+          with:
+              workspaces: ". -> target"

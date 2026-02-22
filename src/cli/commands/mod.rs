@@ -1,5 +1,13 @@
+pub mod debug;
+pub mod debug_clear_state;
+pub mod debug_state;
+pub mod debug_stress;
 pub mod focus_reset;
-pub mod indicator;
 pub mod install;
+pub mod opencode_event;
+pub mod pane_status;
 pub mod state;
+pub mod state_cleanup;
+pub mod state_poll;
 pub mod uninstall;
+pub mod window_status;

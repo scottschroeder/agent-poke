@@ -32,6 +32,15 @@ impl AgentState {
             (Some(Self::Done), Self::Running | Self::NeedsInput | Self::Off | Self::Done) => true,
         }
     }
+
+    pub fn notification_label(self) -> &'static str {
+        match self {
+            Self::NeedsInput => "Needs Attention",
+            Self::Done => "Done",
+            Self::Running => "Running",
+            Self::Off => "Off",
+        }
+    }
 }
 
 impl fmt::Display for AgentState {
@@ -56,29 +65,9 @@ impl FromStr for AgentState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NotificationContext {
-    pub agent_name: String,
-    pub agent_state: AgentState,
-    pub session_name: String,
-    pub window_name: String,
-    pub window_index: String,
-}
-
-impl NotificationContext {
-    pub fn render(&self, template: &str) -> String {
-        template
-            .replace("#{agent_name}", &self.agent_name)
-            .replace("#{agent_state}", self.agent_state.as_str())
-            .replace("#{session_name}", &self.session_name)
-            .replace("#{window_name}", &self.window_name)
-            .replace("#{window_index}", &self.window_index)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{AgentState, NotificationContext};
+    use super::AgentState;
 
     #[test]
     fn parses_valid_state_values() {
@@ -121,17 +110,11 @@ mod tests {
     }
 
     #[test]
-    fn renders_notification_template() {
-        let ctx = NotificationContext {
-            agent_name: "claude".to_string(),
-            agent_state: AgentState::NeedsInput,
-            session_name: "dev".to_string(),
-            window_name: "editor".to_string(),
-            window_index: "2".to_string(),
-        };
-
-        let rendered =
-            ctx.render("[#{agent_name}] #{agent_state} (#{session_name}:#{window_name})");
-        assert_eq!(rendered, "[claude] needs-input (dev:editor)");
+    fn provides_human_friendly_notification_labels() {
+        assert_eq!(
+            AgentState::NeedsInput.notification_label(),
+            "Needs Attention"
+        );
+        assert_eq!(AgentState::Done.notification_label(), "Done");
     }
 }

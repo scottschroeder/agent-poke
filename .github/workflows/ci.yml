@@ -1,0 +1,40 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+jobs:
+    fmt:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup
+            - name: Check formatting
+              run: cargo fmt --all -- --check
+
+    lint:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup
+            - name: Run clippy
+              run: cargo clippy --all-targets --all-features -- -D warnings
+
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup
+            - name: Run tests
+              run: cargo test --all-targets --all-features
+
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup
+            - name: Build release binary
+              run: cargo build --release
