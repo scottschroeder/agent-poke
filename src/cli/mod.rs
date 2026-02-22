@@ -5,6 +5,7 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use commands::debug::DebugCommand;
 use commands::focus_reset::FocusResetCommand;
+use commands::heartbeat::HeartbeatCommand;
 use commands::opencode_event::OpenCodeEventCommand;
 use commands::pane_status::PaneStatusCommand;
 use commands::state::StateCommand;
@@ -24,6 +25,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     State(StateCommand),
+    Heartbeat(HeartbeatCommand),
     FocusReset(FocusResetCommand),
     OpencodeEvent(OpenCodeEventCommand),
     PaneStatus(PaneStatusCommand),
@@ -35,6 +37,7 @@ impl Cli {
     pub fn run(self) -> Result<()> {
         match self.command {
             Commands::State(cmd) => cmd.run(),
+            Commands::Heartbeat(cmd) => cmd.run(),
             Commands::FocusReset(cmd) => cmd.run(),
             Commands::OpencodeEvent(cmd) => cmd.run(),
             Commands::PaneStatus(cmd) => cmd.run(),

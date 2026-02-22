@@ -42,7 +42,6 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
     let env_pairs = tmux.show_env_global_all()?;
     let live_pane_ids: BTreeSet<String> = tmux.list_all_pane_ids()?.into_iter().collect();
     let now_ms = now_epoch_millis();
-    let running_timeout_ms = config::running_heartbeat_timeout_ms(tmux);
     let closed_retention_ms = config::closed_retention_ms(tmux);
 
     let mut touched = 0usize;
@@ -81,6 +80,11 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
         }
 
         if state == AgentState::Running {
+            let agent = tmux
+                .show_env_global(&keys.agent)?
+                .unwrap_or_default();
+            let running_timeout_ms =
+                config::running_heartbeat_timeout_ms_for_agent(tmux, &agent);
             let heartbeat_ts = tmux
                 .show_env_global(&keys.last_heartbeat_ts_ms)?
                 .and_then(|value| value.parse::<u64>().ok())

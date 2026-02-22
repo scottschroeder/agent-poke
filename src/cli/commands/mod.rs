@@ -3,6 +3,7 @@ pub mod debug_clear_state;
 pub mod debug_state;
 pub mod debug_stress;
 pub mod focus_reset;
+pub mod heartbeat;
 pub mod opencode_event;
 pub mod pane_status;
 pub mod state;
