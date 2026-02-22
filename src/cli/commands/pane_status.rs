@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use clap::Args;
 
+use crate::cli::commands::state_cleanup;
 use crate::core::env_keys;
 use crate::core::AgentState;
 use crate::tmux::Tmux;
@@ -22,6 +23,9 @@ impl PaneStatusCommand {
             return Ok(());
         }
 
+        state_cleanup::cleanup_stale_state(&tmux, false)?;
+        state_cleanup::reconcile_state(&tmux)?;
+
         let live_pane_ids = tmux.list_all_pane_ids()?;
         let env_pairs = tmux.show_env_global_all()?;
 
@@ -37,7 +41,6 @@ impl PaneStatusCommand {
         if counts.done > 0 {
             parts.push(format!("{DONE_EMOJI}: {}", counts.done));
         }
-
         println!("{}", parts.join(" "));
         Ok(())
     }
@@ -71,21 +74,20 @@ fn counts_for_live_panes(live_pane_ids: &[String], env_pairs: &[(String, String)
         state_by_pane.insert(pane_id, state);
     }
 
+    let mut idle = 0;
     let mut running = 0;
     let mut needs_input = 0;
     let mut done = 0;
 
     for state in state_by_pane.values() {
         match state {
+            AgentState::Idle => idle += 1,
             AgentState::Running => running += 1,
             AgentState::NeedsInput => needs_input += 1,
             AgentState::Done => done += 1,
-            AgentState::Off => {}
+            AgentState::Closed => {}
         }
     }
-
-    let active = running + needs_input + done;
-    let idle = live_pane_ids.len().saturating_sub(active);
 
     StatusCounts {
         idle,
@@ -137,7 +139,7 @@ mod tests {
         assert_eq!(
             counts_for_live_panes(&live_pane_ids, &env_pairs),
             StatusCounts {
-                idle: 1,
+                idle: 0,
                 running: 1,
                 needs_input: 1,
                 done: 0,
@@ -146,10 +148,10 @@ mod tests {
     }
 
     #[test]
-    fn treats_untracked_or_invalid_values_as_idle() {
+    fn ignores_untracked_or_invalid_values_for_idle_count() {
         let live_pane_ids = vec!["%1".to_string(), "%2".to_string()];
         let env_pairs = vec![
-            ("TMUX_AGENT_PANE_%1_STATE".to_string(), "off".to_string()),
+            ("TMUX_AGENT_PANE_%1_STATE".to_string(), "idle".to_string()),
             (
                 "TMUX_AGENT_PANE_%2_STATE".to_string(),
                 "invalid".to_string(),
@@ -159,7 +161,7 @@ mod tests {
         assert_eq!(
             counts_for_live_panes(&live_pane_ids, &env_pairs),
             StatusCounts {
-                idle: 2,
+                idle: 1,
                 running: 0,
                 needs_input: 0,
                 done: 0,

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Result;
 use clap::Args;
 
+use crate::cli::commands::state_cleanup;
 use crate::core::env_keys;
 use crate::tmux::Tmux;
 
@@ -15,6 +16,9 @@ impl DebugStateCommand {
         if !tmux.is_available() {
             return Ok(());
         }
+
+        state_cleanup::cleanup_stale_state(&tmux, false)?;
+        state_cleanup::reconcile_state(&tmux)?;
 
         let env_pairs = tmux.show_env_global_all()?;
         let mut agent_env: BTreeMap<String, String> = BTreeMap::new();
@@ -47,6 +51,10 @@ impl DebugStateCommand {
 
             let state = env_or_dash(&agent_env, &format!("TMUX_AGENT_PANE_{pane_id}_STATE"));
             let agent = env_or_dash(&agent_env, &format!("TMUX_AGENT_PANE_{pane_id}_AGENT"));
+            let instance_id = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_INSTANCE_ID"),
+            );
             let done = env_or_dash(&agent_env, &format!("TMUX_AGENT_PANE_{pane_id}_DONE"));
             let done_window = env_or_dash(
                 &agent_env,
@@ -60,17 +68,39 @@ impl DebugStateCommand {
                 &agent_env,
                 &format!("TMUX_AGENT_PANE_{pane_id}_NOTIFICATION_ID"),
             );
+            let last_notified_state = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_LAST_NOTIFIED_STATE"),
+            );
             let last_event_ts = env_or_dash(
                 &agent_env,
                 &format!("TMUX_AGENT_PANE_{pane_id}_LAST_EVENT_TS_MS"),
+            );
+            let last_heartbeat_ts = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_LAST_HEARTBEAT_TS_MS"),
             );
             let last_event_priority = env_or_dash(
                 &agent_env,
                 &format!("TMUX_AGENT_PANE_{pane_id}_LAST_EVENT_PRIORITY"),
             );
+            let agent_pid =
+                env_or_dash(&agent_env, &format!("TMUX_AGENT_PANE_{pane_id}_AGENT_PID"));
+            let pane_pid_at_start = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_PANE_PID_AT_START"),
+            );
+            let pane_cmd_at_start = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_PANE_CMD_AT_START"),
+            );
+            let closed_ts_ms = env_or_dash(
+                &agent_env,
+                &format!("TMUX_AGENT_PANE_{pane_id}_CLOSED_TS_MS"),
+            );
 
             println!(
-                "pane={pane_id} active={pane_active} location={session_name}:{window_name} window={window_id} state={state} agent={agent} done={done} done_window={done_window} pending_reset={pending_reset} notification_id={notification_id} last_event_ts_ms={last_event_ts} last_event_priority={last_event_priority}"
+                "pane={pane_id} active={pane_active} location={session_name}:{window_name} window={window_id} state={state} agent={agent} instance_id={instance_id} done={done} done_window={done_window} pending_reset={pending_reset} notification_id={notification_id} last_notified_state={last_notified_state} last_event_ts_ms={last_event_ts} last_heartbeat_ts_ms={last_heartbeat_ts} last_event_priority={last_event_priority} agent_pid={agent_pid} pane_pid_at_start={pane_pid_at_start} pane_cmd_at_start={pane_cmd_at_start} closed_ts_ms={closed_ts_ms}"
             );
         }
 

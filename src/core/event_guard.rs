@@ -41,9 +41,29 @@ impl<'a> EventGuard<'a> {
     {
         let lock_key = format!("agent-poke:pane:{}", self.pane_id);
         let Some(_lock) = self.tmux.try_lock_channel(&lock_key, self.lock_timeout)? else {
-            return Ok(EventApplyOutcome::LockTimeout);
+            self.tmux.unlock_channel(&lock_key);
+            let Some(_lock) = self
+                .tmux
+                .try_lock_channel(&lock_key, Duration::from_millis(250))?
+            else {
+                return Ok(EventApplyOutcome::LockTimeout);
+            };
+
+            return self.apply_with_lock(state, event_ts_ms, apply_state);
         };
 
+        self.apply_with_lock(state, event_ts_ms, apply_state)
+    }
+
+    fn apply_with_lock<F>(
+        &self,
+        state: AgentState,
+        event_ts_ms: u64,
+        apply_state: F,
+    ) -> Result<EventApplyOutcome>
+    where
+        F: FnOnce() -> Result<()>,
+    {
         let pane_keys = PaneEnvKeys::new(&self.pane_id);
         let previous_ts = self
             .tmux
@@ -73,10 +93,11 @@ impl<'a> EventGuard<'a> {
 
 pub fn state_priority(state: AgentState) -> u8 {
     match state {
-        AgentState::Running => 0,
-        AgentState::Done => 1,
-        AgentState::NeedsInput => 2,
-        AgentState::Off => 3,
+        AgentState::Idle => 0,
+        AgentState::Running => 1,
+        AgentState::Done => 2,
+        AgentState::NeedsInput => 3,
+        AgentState::Closed => 4,
     }
 }
 

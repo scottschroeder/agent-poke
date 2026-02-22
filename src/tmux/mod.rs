@@ -91,25 +91,6 @@ impl Tmux {
         }
     }
 
-    pub fn show_window_option_target(&self, target: &str, option: &str) -> Result<Option<String>> {
-        match self.capture(&["show-window-option", "-qvt", target, option]) {
-            Ok(value) if value.is_empty() => Ok(None),
-            Ok(value) => Ok(Some(value)),
-            Err(_) => Ok(None),
-        }
-    }
-
-    pub fn set_window_option_target(&self, target: &str, option: &str, value: &str) -> Result<()> {
-        self.status(&["set-window-option", "-qt", target, option, value])
-            .with_context(|| {
-                format!("failed to set window option {option} for target {target} to {value}")
-            })
-    }
-
-    pub fn unset_window_option_target(&self, target: &str, option: &str) {
-        self.status_ignore_failure(&["set-window-option", "-qt", target, "-u", option]);
-    }
-
     pub fn list_panes_in_window(&self, window_id: &str) -> Result<Vec<PaneSummary>> {
         let output = self.capture(&["list-panes", "-t", window_id, "-F", "#{pane_id}"])?;
 
@@ -137,6 +118,31 @@ impl Tmux {
             .filter(|line| !line.is_empty())
             .map(ToOwned::to_owned)
             .collect())
+    }
+
+    pub fn pane_pid(&self, pane_id: &str) -> Result<Option<u32>> {
+        let raw = self.display_target(pane_id, "#{pane_pid}")?;
+        if raw.is_empty() {
+            return Ok(None);
+        }
+        Ok(raw.parse::<u32>().ok())
+    }
+
+    pub fn pane_current_command(&self, pane_id: &str) -> Result<Option<String>> {
+        let value = self.display_target(pane_id, "#{pane_current_command}")?;
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(value))
+        }
+    }
+
+    pub fn pid_is_alive(&self, pid: u32) -> bool {
+        Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
     }
 
     pub fn refresh_client(&self) {

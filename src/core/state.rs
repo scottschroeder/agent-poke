@@ -3,33 +3,48 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
+    Idle,
     Running,
     NeedsInput,
     Done,
-    Off,
+    Closed,
 }
 
 impl AgentState {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Idle => "idle",
             Self::Running => "running",
             Self::NeedsInput => "needs-input",
             Self::Done => "done",
-            Self::Off => "off",
+            Self::Closed => "closed",
         }
     }
 
     pub fn is_valid_transition(from: Option<Self>, to: Self) -> bool {
         match (from, to) {
-            (None, Self::Running | Self::NeedsInput | Self::Done | Self::Off) => true,
-            (Some(Self::Off), Self::Running | Self::NeedsInput | Self::Done | Self::Off) => true,
-            (Some(Self::Running), Self::NeedsInput | Self::Done | Self::Off | Self::Running) => {
+            (None, Self::Idle | Self::Running | Self::NeedsInput | Self::Done) => true,
+            (None, Self::Closed) => false,
+            (Some(Self::Closed), Self::Idle | Self::Running | Self::NeedsInput | Self::Done) => {
                 true
             }
-            (Some(Self::NeedsInput), Self::Running | Self::Done | Self::Off | Self::NeedsInput) => {
-                true
-            }
-            (Some(Self::Done), Self::Running | Self::NeedsInput | Self::Off | Self::Done) => true,
+            (Some(Self::Closed), Self::Closed) => true,
+            (
+                Some(Self::Idle),
+                Self::Idle | Self::Running | Self::NeedsInput | Self::Done | Self::Closed,
+            ) => true,
+            (
+                Some(Self::Running),
+                Self::Idle | Self::Running | Self::NeedsInput | Self::Done | Self::Closed,
+            ) => true,
+            (
+                Some(Self::NeedsInput),
+                Self::Idle | Self::Running | Self::NeedsInput | Self::Done | Self::Closed,
+            ) => true,
+            (
+                Some(Self::Done),
+                Self::Idle | Self::Running | Self::NeedsInput | Self::Done | Self::Closed,
+            ) => true,
         }
     }
 
@@ -38,7 +53,8 @@ impl AgentState {
             Self::NeedsInput => "Needs Attention",
             Self::Done => "Done",
             Self::Running => "Running",
-            Self::Off => "Off",
+            Self::Idle => "Idle",
+            Self::Closed => "Closed",
         }
     }
 }
@@ -54,12 +70,13 @@ impl FromStr for AgentState {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input {
+            "idle" => Ok(Self::Idle),
             "running" => Ok(Self::Running),
             "needs-input" => Ok(Self::NeedsInput),
             "done" => Ok(Self::Done),
-            "off" => Ok(Self::Off),
+            "closed" => Ok(Self::Closed),
             _ => Err(format!(
-                "invalid state '{input}', expected running|needs-input|done|off"
+                "invalid state '{input}', expected idle|running|needs-input|done|closed"
             )),
         }
     }
@@ -71,6 +88,7 @@ mod tests {
 
     #[test]
     fn parses_valid_state_values() {
+        assert_eq!("idle".parse::<AgentState>().ok(), Some(AgentState::Idle));
         assert_eq!(
             "running".parse::<AgentState>().ok(),
             Some(AgentState::Running)
@@ -80,7 +98,10 @@ mod tests {
             Some(AgentState::NeedsInput)
         );
         assert_eq!("done".parse::<AgentState>().ok(), Some(AgentState::Done));
-        assert_eq!("off".parse::<AgentState>().ok(), Some(AgentState::Off));
+        assert_eq!(
+            "closed".parse::<AgentState>().ok(),
+            Some(AgentState::Closed)
+        );
     }
 
     #[test]
@@ -101,11 +122,15 @@ mod tests {
         ));
         assert!(AgentState::is_valid_transition(
             Some(AgentState::Done),
-            AgentState::Off
+            AgentState::Closed
         ));
         assert!(AgentState::is_valid_transition(
             Some(AgentState::Done),
             AgentState::Running
+        ));
+        assert!(AgentState::is_valid_transition(
+            Some(AgentState::Closed),
+            AgentState::Idle
         ));
     }
 

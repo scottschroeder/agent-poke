@@ -1,9 +1,11 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::cli::commands::state::run_state;
+use crate::cli::commands::state::run_state_prepared;
+use crate::cli::commands::state::{now_epoch_millis, resolve_pane_id};
 use crate::cli::commands::state_cleanup;
 use crate::core::AgentState;
+use crate::core::env_keys::PaneEnvKeys;
 use crate::core::event_guard::{
     DEFAULT_LOCK_TIMEOUT, EventApplyOutcome, EventGuard, state_priority,
 };
@@ -46,134 +48,141 @@ pub(crate) fn run_opencode_event(
     pane: Option<String>,
     event_ts_ms: Option<u64>,
 ) -> Result<()> {
-    let state = map_event_to_state(event, status);
-    if let Some(state) = state {
-        let tmux = Tmux::new();
-        if !tmux.is_available() {
-            return Ok(());
+    let tmux = Tmux::new();
+    if !tmux.is_available() {
+        return Ok(());
+    }
+
+    state_cleanup::cleanup_stale_state(&tmux, false)?;
+    state_cleanup::reconcile_state(&tmux)?;
+
+    let pane_id = resolve_pane_id(&tmux, pane.as_deref())?;
+    let event_ts_ms = event_ts_ms.unwrap_or_else(now_epoch_millis);
+
+    match map_event_to_action(event, status) {
+        OpenCodeEventAction::Transition(state) => {
+            let guard = EventGuard::new(&tmux, pane_id.clone(), DEFAULT_LOCK_TIMEOUT);
+            match guard.apply(state, event_ts_ms, || {
+                run_state_prepared(agent.clone(), state, Some(pane_id.clone()))
+            })? {
+                EventApplyOutcome::Applied => {
+                    log::debug!(
+                        "applied opencode event event={} status={:?} pane={} ts_ms={} priority={}",
+                        event,
+                        status,
+                        pane_id,
+                        event_ts_ms,
+                        state_priority(state)
+                    );
+                }
+                EventApplyOutcome::IgnoredStale => {
+                    log::debug!(
+                        "ignored stale opencode event event={} status={:?} pane={} ts_ms={} priority={}",
+                        event,
+                        status,
+                        pane_id,
+                        event_ts_ms,
+                        state_priority(state)
+                    );
+                }
+                EventApplyOutcome::LockTimeout => {
+                    log::debug!(
+                        "skipped event due pane lock timeout after {}ms event={} status={:?} pane={} ts_ms={} priority={}",
+                        DEFAULT_LOCK_TIMEOUT.as_millis(),
+                        event,
+                        status,
+                        pane_id,
+                        event_ts_ms,
+                        state_priority(state)
+                    );
+                }
+            }
         }
-
-        state_cleanup::cleanup_stale_state(&tmux, false)?;
-
-        let pane_id = resolve_pane_id(&tmux, pane.as_deref())?;
-        let event_ts_ms = event_ts_ms.unwrap_or_else(now_epoch_millis);
-
-        let guard = EventGuard::new(&tmux, pane_id.clone(), DEFAULT_LOCK_TIMEOUT);
-        match guard.apply(state, event_ts_ms, || {
-            run_state(agent.clone(), state, Some(pane_id.clone()))
-        })? {
-            EventApplyOutcome::Applied => {
-                log::debug!(
-                    "applied opencode event event={} status={:?} pane={} ts_ms={} priority={}",
-                    event,
-                    status,
-                    pane_id,
-                    event_ts_ms,
-                    state_priority(state)
-                );
-            }
-            EventApplyOutcome::IgnoredStale => {
-                log::debug!(
-                    "ignored stale opencode event event={} status={:?} pane={} ts_ms={} priority={}",
-                    event,
-                    status,
-                    pane_id,
-                    event_ts_ms,
-                    state_priority(state)
-                );
-            }
-            EventApplyOutcome::LockTimeout => {
-                log::warn!(
-                    "timed out waiting for pane event lock after {}ms event={} status={:?} pane={} ts_ms={} priority={}",
-                    DEFAULT_LOCK_TIMEOUT.as_millis(),
-                    event,
-                    status,
-                    pane_id,
-                    event_ts_ms,
-                    state_priority(state)
-                );
-            }
+        OpenCodeEventAction::HeartbeatOnly => {
+            touch_heartbeat(&tmux, &pane_id, event_ts_ms)?;
+            log::debug!(
+                "applied heartbeat-only opencode event event={} status={:?} pane={} ts_ms={}",
+                event,
+                status,
+                pane_id,
+                event_ts_ms,
+            );
         }
     }
+
     Ok(())
 }
 
-fn map_event_to_state(event: &str, status: Option<&str>) -> Option<AgentState> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpenCodeEventAction {
+    Transition(AgentState),
+    HeartbeatOnly,
+}
+
+fn map_event_to_action(event: &str, status: Option<&str>) -> OpenCodeEventAction {
     match event {
-        "permission.asked" | "permission.ask" => Some(AgentState::NeedsInput),
-        "session.idle" | "session.error" => Some(AgentState::Done),
+        "permission.asked" => OpenCodeEventAction::Transition(AgentState::NeedsInput),
+        "session.idle" | "session.error" => OpenCodeEventAction::Transition(AgentState::Done),
         "session.status" => match status {
-            Some("busy") | Some("retry") => Some(AgentState::Running),
-            Some("idle") => Some(AgentState::Done),
-            _ => None,
+            Some("busy") | Some("retry") => OpenCodeEventAction::Transition(AgentState::Running),
+            Some("idle") => OpenCodeEventAction::Transition(AgentState::Done),
+            _ => OpenCodeEventAction::HeartbeatOnly,
         },
-        _ => None,
+        _ => OpenCodeEventAction::HeartbeatOnly,
     }
 }
 
-fn resolve_pane_id(tmux: &Tmux, pane: Option<&str>) -> Result<String> {
-    if let Some(pane) = pane {
-        return Ok(pane.to_string());
-    }
-
-    if let Ok(from_env) = std::env::var("TMUX_PANE")
-        && !from_env.is_empty()
-    {
-        return Ok(from_env);
-    }
-
-    tmux.display_current("#{pane_id}")
-}
-
-fn now_epoch_millis() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        return 0;
+fn touch_heartbeat(tmux: &Tmux, pane_id: &str, ts_ms: u64) -> Result<()> {
+    let keys = PaneEnvKeys::new(pane_id);
+    let Some(state_raw) = tmux.show_env_global(&keys.state)? else {
+        return Ok(());
     };
-    duration.as_millis() as u64
+    let Ok(state) = state_raw.parse::<AgentState>() else {
+        return Ok(());
+    };
+    if state != AgentState::Running {
+        return Ok(());
+    }
+
+    tmux.set_env_global(&keys.last_heartbeat_ts_ms, &ts_ms.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{map_event_to_state, state_priority};
+    use super::{OpenCodeEventAction, map_event_to_action, state_priority};
     use crate::core::AgentState;
 
     #[test]
     fn maps_opencode_permission_event() {
         assert_eq!(
-            map_event_to_state("permission.asked", None),
-            Some(AgentState::NeedsInput)
-        );
-    }
-
-    #[test]
-    fn maps_opencode_legacy_permission_event() {
-        assert_eq!(
-            map_event_to_state("permission.ask", None),
-            Some(AgentState::NeedsInput)
+            map_event_to_action("permission.asked", None),
+            OpenCodeEventAction::Transition(AgentState::NeedsInput)
         );
     }
 
     #[test]
     fn maps_opencode_session_status_busy_to_running() {
         assert_eq!(
-            map_event_to_state("session.status", Some("busy")),
-            Some(AgentState::Running)
+            map_event_to_action("session.status", Some("busy")),
+            OpenCodeEventAction::Transition(AgentState::Running)
         );
     }
 
     #[test]
     fn maps_opencode_session_status_idle_to_done() {
         assert_eq!(
-            map_event_to_state("session.status", Some("idle")),
-            Some(AgentState::Done)
+            map_event_to_action("session.status", Some("idle")),
+            OpenCodeEventAction::Transition(AgentState::Done)
         );
     }
 
     #[test]
-    fn ignores_unknown_events() {
-        assert_eq!(map_event_to_state("session.updated", None), None);
+    fn treats_unknown_events_as_heartbeat() {
+        assert_eq!(
+            map_event_to_action("session.updated", None),
+            OpenCodeEventAction::HeartbeatOnly
+        );
     }
 
     #[test]

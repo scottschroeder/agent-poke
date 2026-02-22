@@ -2,13 +2,6 @@ use crate::core::AgentState;
 use crate::tmux::Tmux;
 
 #[derive(Debug, Clone)]
-pub struct StateVisualConfig {
-    pub border: String,
-    pub title_bg: String,
-    pub title_fg: String,
-}
-
-#[derive(Debug, Clone)]
 pub struct WindowStatusGlyphConfig {
     pub running: String,
     pub needs_input: String,
@@ -78,11 +71,7 @@ pub fn notification_sound_enabled(tmux: &Tmux) -> bool {
 
 pub fn notification_sound_name(tmux: &Tmux) -> Option<String> {
     let value = option_or_default(tmux, "@agent-indicator-notification-sound-name", "");
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
+    if value.is_empty() { None } else { Some(value) }
 }
 
 pub fn state_enabled(tmux: &Tmux, state: AgentState) -> bool {
@@ -93,46 +82,22 @@ pub fn state_enabled(tmux: &Tmux, state: AgentState) -> bool {
     )
 }
 
-pub fn state_visual_config(tmux: &Tmux, state: AgentState) -> StateVisualConfig {
-    StateVisualConfig {
-        border: option_or_default(
-            tmux,
-            &format!("@agent-indicator-{}-border", state.as_str()),
-            default_state_border(state),
-        ),
-        title_bg: option_or_default(
-            tmux,
-            &format!("@agent-indicator-{}-window-title-bg", state.as_str()),
-            default_state_title_bg(state),
-        ),
-        title_fg: option_or_default(
-            tmux,
-            &format!("@agent-indicator-{}-window-title-fg", state.as_str()),
-            default_state_title_fg(state),
-        ),
-    }
+pub fn running_heartbeat_timeout_ms(tmux: &Tmux) -> u64 {
+    option_or_default(
+        tmux,
+        "@agent-indicator-running-heartbeat-timeout-ms",
+        "30000",
+    )
+    .parse::<u64>()
+    .ok()
+    .filter(|value| *value > 0)
+    .unwrap_or(30000)
 }
 
-fn default_state_border(state: AgentState) -> &'static str {
-    match state {
-        AgentState::Running => "default",
-        AgentState::NeedsInput => "yellow",
-        AgentState::Done => "green",
-        AgentState::Off => "default",
-    }
-}
-
-fn default_state_title_bg(state: AgentState) -> &'static str {
-    match state {
-        AgentState::NeedsInput => "yellow",
-        AgentState::Done => "red",
-        AgentState::Running | AgentState::Off => "",
-    }
-}
-
-fn default_state_title_fg(state: AgentState) -> &'static str {
-    match state {
-        AgentState::NeedsInput | AgentState::Done => "black",
-        AgentState::Running | AgentState::Off => "",
-    }
+pub fn closed_retention_ms(tmux: &Tmux) -> u64 {
+    option_or_default(tmux, "@agent-indicator-closed-retention-ms", "900000")
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .unwrap_or(900000)
 }

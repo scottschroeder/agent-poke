@@ -5,6 +5,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use clap::Args;
 
+use crate::cli::commands::state_cleanup;
 use crate::core::AgentState;
 use crate::core::env_keys;
 use crate::tmux::Tmux;
@@ -33,6 +34,14 @@ impl StatePollCommand {
 
         loop {
             let started = Instant::now();
+
+            if let Err(err) = state_cleanup::cleanup_stale_state(&tmux, false) {
+                log::warn!("state-poll stale cleanup failed: {err}");
+            }
+            if let Err(err) = state_cleanup::reconcile_state(&tmux) {
+                log::warn!("state-poll reconcile failed: {err}");
+            }
+
             let current = match collect_pane_states(&tmux) {
                 Ok(current) => current,
                 Err(err) => {
@@ -74,7 +83,7 @@ fn collect_pane_states(tmux: &Tmux) -> Result<HashMap<String, PaneStateSnapshot>
         snapshots.insert(
             pane_id.clone(),
             PaneStateSnapshot {
-                state: state_by_pane.remove(&pane_id).unwrap_or(AgentState::Off),
+                state: state_by_pane.remove(&pane_id).unwrap_or(AgentState::Idle),
                 agent: agent_by_pane.remove(&pane_id),
             },
         );
@@ -123,7 +132,7 @@ fn log_transitions(
                 let now = now_epoch_seconds();
                 let location = pane_location(tmux, pane_id);
                 println!(
-                    "[{now:.3}] pane={pane_id} location {} state {} -> off agent {} -> - (pane removed)",
+                    "[{now:.3}] pane={pane_id} location {} state {} -> closed agent {} -> - (pane removed)",
                     location,
                     from.state,
                     display_agent(from.agent.as_deref())

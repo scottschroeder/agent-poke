@@ -4,46 +4,41 @@ pub const ACTIVE_PANE_PREFIX: &str = "TMUX_AGENT_ACTIVE_PANE_";
 
 #[derive(Debug, Clone)]
 pub struct PaneEnvKeys {
+    pub instance_id: String,
     pub state: String,
     pub agent: String,
     pub done: String,
     pub done_window: String,
     pub pending_reset: String,
     pub notification_id: String,
+    pub last_notified_state: String,
     pub last_event_ts_ms: String,
+    pub last_heartbeat_ts_ms: String,
     pub last_event_priority: String,
+    pub agent_pid: String,
+    pub pane_pid_at_start: String,
+    pub pane_cmd_at_start: String,
+    pub closed_ts_ms: String,
 }
 
 impl PaneEnvKeys {
     pub fn new(pane_id: &str) -> Self {
         Self {
+            instance_id: pane_key(pane_id, "_INSTANCE_ID"),
             state: pane_key(pane_id, "_STATE"),
             agent: pane_key(pane_id, "_AGENT"),
             done: pane_key(pane_id, "_DONE"),
             done_window: pane_key(pane_id, "_DONE_WINDOW"),
             pending_reset: pane_key(pane_id, "_PENDING_RESET"),
             notification_id: pane_key(pane_id, "_NOTIFICATION_ID"),
+            last_notified_state: pane_key(pane_id, "_LAST_NOTIFIED_STATE"),
             last_event_ts_ms: pane_key(pane_id, "_LAST_EVENT_TS_MS"),
+            last_heartbeat_ts_ms: pane_key(pane_id, "_LAST_HEARTBEAT_TS_MS"),
             last_event_priority: pane_key(pane_id, "_LAST_EVENT_PRIORITY"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct WindowEnvKeys {
-    pub done: String,
-    pub orig_active_border_style: String,
-    pub orig_status_style: String,
-    pub orig_status_current_style: String,
-}
-
-impl WindowEnvKeys {
-    pub fn new(window_id: &str) -> Self {
-        Self {
-            done: window_key(window_id, "_DONE"),
-            orig_active_border_style: window_key(window_id, "_ORIG_ACTIVE_BORDER_STYLE"),
-            orig_status_style: window_key(window_id, "_ORIG_STATUS_STYLE"),
-            orig_status_current_style: window_key(window_id, "_ORIG_STATUS_CURRENT_STYLE"),
+            agent_pid: pane_key(pane_id, "_AGENT_PID"),
+            pane_pid_at_start: pane_key(pane_id, "_PANE_PID_AT_START"),
+            pane_cmd_at_start: pane_key(pane_id, "_PANE_CMD_AT_START"),
+            closed_ts_ms: pane_key(pane_id, "_CLOSED_TS_MS"),
         }
     }
 }
@@ -68,10 +63,6 @@ fn pane_key(pane_id: &str, suffix: &str) -> String {
     format!("{PANE_PREFIX}{pane_id}{suffix}")
 }
 
-fn window_key(window_id: &str, suffix: &str) -> String {
-    format!("{WINDOW_PREFIX}{window_id}{suffix}")
-}
-
 fn parse_id_with_prefix<'a>(key: &'a str, prefix: &str) -> Option<&'a str> {
     let rest = key.strip_prefix(prefix)?;
     rest.split_once('_').map(|(id, _)| id)
@@ -80,8 +71,8 @@ fn parse_id_with_prefix<'a>(key: &'a str, prefix: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        PaneEnvKeys, WindowEnvKeys, active_pane_key, parse_active_pane_agent,
-        parse_pane_id_from_key, parse_window_id_from_key,
+        PaneEnvKeys, active_pane_key, parse_active_pane_agent, parse_pane_id_from_key,
+        parse_window_id_from_key,
     };
 
     #[test]
@@ -91,16 +82,6 @@ mod tests {
         assert_eq!(
             keys.last_event_priority,
             "TMUX_AGENT_PANE_%13_LAST_EVENT_PRIORITY"
-        );
-    }
-
-    #[test]
-    fn builds_window_keys_consistently() {
-        let keys = WindowEnvKeys::new("@4");
-        assert_eq!(keys.done, "TMUX_AGENT_WINDOW_@4_DONE");
-        assert_eq!(
-            keys.orig_status_current_style,
-            "TMUX_AGENT_WINDOW_@4_ORIG_STATUS_CURRENT_STYLE"
         );
     }
 

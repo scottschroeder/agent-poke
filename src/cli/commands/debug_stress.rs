@@ -83,7 +83,7 @@ impl DebugStressCommand {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 let state_after = tmux
                     .show_env_global(&state_key)?
-                    .unwrap_or_else(|| "off".to_string());
+                    .unwrap_or_else(|| "idle".to_string());
 
                 let focus_changed = before_focus != after_focus;
                 if !stdout.is_empty() {
@@ -144,14 +144,13 @@ struct Step {
 fn build_steps(agent: &str, pane: &str, window: &str, base_ts: u64) -> Vec<Step> {
     vec![
         Step {
-            name: "state-off",
+            name: "state-closed",
             args: vec![
-                "debug".to_string(),
                 "state".to_string(),
                 "--agent".to_string(),
                 agent.to_string(),
                 "--state".to_string(),
-                "off".to_string(),
+                "closed".to_string(),
                 "--pane".to_string(),
                 pane.to_string(),
             ],

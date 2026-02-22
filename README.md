@@ -2,7 +2,7 @@
 
 Event-driven tmux attention signaling for coding agents.
 
-`agent-poke` updates tmux visuals and notifications when an agent is running, needs input, or is done.
+`agent-poke` tracks per-pane agent lifecycle state and emits glyphs/notifications for attention states.
 
 ## Install
 
@@ -49,7 +49,7 @@ set -g window-status-current-format '#(#{@agent-poke-bin} window-status --window
 # default window-status glyphs:
 # running 🔄, needs-input ⏸️, done ✅
 
-# focus hooks to clear deferred done/needs-input styling
+# focus hooks to clear done/needs-input attention state back to idle
 set-hook -ag pane-focus-in 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
 set-hook -ag after-select-window 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
 set-hook -ag after-select-pane 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
@@ -82,11 +82,10 @@ OpenCode integration is plugin-based. Copy `examples/opencode-plugin.js` to one 
 - `~/.config/opencode/plugins/agent-poke.js` (global)
 - `.opencode/plugins/agent-poke.js` (project)
 
-The plugin maps OpenCode events to `agent-poke` states:
+The plugin forwards OpenCode events to `agent-poke`:
 
-- `session.status busy|retry` -> `running`
-- `permission.asked` -> `needs-input`
-- `session.status idle`, `session.idle`, `session.error` -> `done`
+- transition events update state (`running`, `needs-input`, `done`)
+- other events are treated as heartbeat-only updates while a pane is active
 
 
 ## Configure Codex (optional compatibility)
@@ -108,6 +107,10 @@ Reference templates: `examples/codex-notify.sh` and `examples/codex-config.snipp
 set -g @agent-indicator-window-status-running-glyph '🔄'
 set -g @agent-indicator-window-status-needs-input-glyph '⏸️'
 set -g @agent-indicator-window-status-done-glyph '✅'
+
+# Heartbeat/liveness tuning
+set -g @agent-indicator-running-heartbeat-timeout-ms '30000'
+set -g @agent-indicator-closed-retention-ms '900000'
 
 # Notification behavior
 # Keep notifications sticky until dismissed (default: off)
@@ -134,7 +137,8 @@ System notification format is fixed:
 agent-poke state --agent claude --state running
 agent-poke state --agent claude --state needs-input
 agent-poke state --agent claude --state done
-agent-poke state --agent claude --state off
+agent-poke state --agent claude --state idle
+agent-poke state --agent claude --state closed
 
 agent-poke opencode-event --event session.status --status busy --event-ts-ms 1730000000000
 agent-poke opencode-event --event permission.asked --event-ts-ms 1730000000001

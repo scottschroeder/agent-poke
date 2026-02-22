@@ -10,25 +10,26 @@ This document captures the expected runtime behavior for `agent-poke` based on `
 
 ## Core state model
 
-Per pane, an agent can be in one of four states:
+Per pane, an agent can be in one of five tracked states:
 
+- `idle`
 - `running`
 - `needs-input`
 - `done`
-- `off`
+- `closed`
 
-State drives three visual channels and one notification channel:
+There is also an implicit `none` state for panes with no record.
 
-- pane background style
-- active pane border style
-- window title styles (`window-status-style`, `window-status-current-style`)
+State drives glyph/status output and notifications:
+
+- pane and window glyph outputs
 - user notifications (tmux display-message plus optional system command)
 
 ## Event mapping
 
 ### Claude
 
-- `UserPromptSubmit` -> `off` then `running`
+- `UserPromptSubmit` -> `running`
 - `PermissionRequest` -> `needs-input`
 - `Stop` -> `done`
 
@@ -39,33 +40,26 @@ State drives three visual channels and one notification channel:
 - completion/error events (`agent-turn-complete`, `complete`, `done`, `stop`, `error`, `fail*`) -> `done`
 - unknown event -> `done`
 
-## Style behavior
+## Liveness and heartbeat behavior
 
-Defaults by state:
-
-- `running`: border/background default, no title styling
-- `needs-input`: yellow border, yellow title bg, black title fg
-- `done`: green border, red title bg, black title fg
-- `off`: restore baseline styles and clear markers
-
-Option resolution semantics:
-
-- If an option is unset, use default value.
-- If an option is explicitly set to empty string, skip applying that property.
-- If background/border channel is globally disabled, reset that channel to baseline style.
+- transition events change state
+- heartbeat-only events do not change state and only refresh heartbeat timestamp
+- `running` transitions back to `idle` when heartbeat timeout expires
+- tracked panes transition to `closed` when process fingerprint no longer matches
+- `closed` records are retained for a configurable TTL then garbage-collected to `none`
 
 ## Focus reset behavior
 
 With `@agent-indicator-reset-on-focus` enabled:
 
-- `done` styling is deferred and persists until source pane/window regains focus.
-- on focus of source pane/window, clear deferred style and restore original window title/border style.
+- `done` persists until source pane/window regains focus.
+- on focus of source pane/window, clear attention state and return to `idle`.
 - ignore stale focus hook calls for panes/windows that are not currently focused.
 
 `needs-input` behavior:
 
-- keep styling while user is away.
-- clear styles when user returns focus to source pane/window.
+- keep state while user is away.
+- clear to `idle` when user returns focus to source pane/window.
 
 ## Notification behavior
 
@@ -107,10 +101,10 @@ Indicator output uses per-agent icon mapping with a default icon.
 
 ### v1
 
-- State transitions (`running`, `needs-input`, `done`, `off`)
+- State transitions (`idle`, `running`, `needs-input`, `done`, `closed`)
 - tmux env state markers
-- pane border/background + title style apply/restore
-- focus-driven reset for `done` and `needs-input`
+- glyph/status state output
+- focus-driven reset for `done` and `needs-input` back to `idle`
 - notification formatting including session/window
 - indicator icon for state in active pane and same-window fallback
 - Claude hook integration

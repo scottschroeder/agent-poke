@@ -8,7 +8,7 @@ set -g window-status-current-format '#(#{@agent-poke-bin} window-status --window
 # defaults for window-status glyphs are:
 # running 🔄, needs-input ⏸️, done ✅
 
-# focus hooks to clear deferred done/needs-input styling
+# focus hooks to clear done/needs-input back to idle
 set-hook -ag pane-focus-in 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
 set-hook -ag after-select-window 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
 set-hook -ag after-select-pane 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'

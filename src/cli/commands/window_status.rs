@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 
+use crate::cli::commands::state_cleanup;
 use crate::config;
 use crate::tmux::Tmux;
 
@@ -16,6 +17,9 @@ impl WindowStatusCommand {
         if !tmux.is_available() {
             return Ok(());
         }
+
+        state_cleanup::cleanup_stale_state(&tmux, false)?;
+        state_cleanup::reconcile_state(&tmux)?;
 
         if !config::enabled(&tmux, "@agent-indicator-window-status-enabled", true) {
             println!();
