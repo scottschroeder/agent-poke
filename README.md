@@ -1,156 +1,73 @@
 # agent-poke
 
-Event-driven tmux attention signaling for coding agents.
+See at a glance which tmux windows have coding agents that are running, waiting for input, or finished — with emoji indicators right in your tab bar.
 
-`agent-poke` tracks per-pane agent lifecycle state and emits glyphs/notifications for attention states.
+`🔄 1:project` agent working · `⏸️ 2:project` needs your attention · `✅ 3:project` done
 
-## Install
+## Quickstart
 
-No installer script is required. Install the binary and then add config snippets manually.
-
-### Option A: build/install with Cargo
-
-From a local checkout:
-
-```bash
-cargo install --path .
-```
-
-From GitHub directly:
+### 1. Install
 
 ```bash
 cargo install --git https://github.com/scottschroeder/agent-poke
 ```
 
-### Option B: install from GitHub release tarball
+### 2. Add to `~/.tmux.conf`
 
-1. Download the matching `agent-poke-<version>-<target>.tar.gz` from Releases.
-2. Extract and move the binary into your `PATH`.
-
-Example:
-
-```bash
-tar -xzf agent-poke-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-install -m 0755 agent-poke-0.1.0-x86_64-unknown-linux-gnu/agent-poke ~/.local/bin/agent-poke
-```
-
-## Configure tmux
-
-Add this to `~/.tmux.conf`:
-
-```tmux
-# status segment
-set -g @agent-poke-bin "$HOME/.cargo/bin/agent-poke"
-
-# minimal: prefix each window label with state glyph
-set -g window-status-format '#(#{@agent-poke-bin} window-status --window "#{window_id}" 2>/dev/null) #I:#W#{?window_flags,#{window_flags},}'
-set -g window-status-current-format '#(#{@agent-poke-bin} window-status --window "#{window_id}" 2>/dev/null) #I:#W#{?window_flags,#{window_flags},}'
-
-# default window-status glyphs:
-# running 🔄, needs-input ⏸️, done ✅
-
-# focus hooks to clear done/needs-input attention state back to idle
-set-hook -ag pane-focus-in 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
-set-hook -ag after-select-window 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
-set-hook -ag after-select-pane 'run-shell -b "#{@agent-poke-bin} focus-reset >/dev/null 2>&1"'
-```
-
-Reload tmux:
+Paste the contents of [`examples/tmux.conf.snippet`](examples/tmux.conf.snippet) into your `~/.tmux.conf`, then reload:
 
 ```bash
 tmux source-file ~/.tmux.conf
 ```
 
-Reference template: `examples/tmux.conf.snippet`.
+> If you see `returned 127`, tmux can't find the binary. Make sure `@agent-poke-bin` points to the right path (default is `$HOME/.cargo/bin/agent-poke`).
 
-If you see `returned 127`, tmux cannot find `agent-poke`. Set `@agent-poke-bin` to an absolute path (as above), then reload tmux.
+### 3. Hook up your agent
 
-## Configure Claude hooks
+<details>
+<summary><b>Claude Code</b></summary>
 
-Add these commands to your Claude hook config (`~/.claude/settings.json`) so Claude events drive state transitions:
+Merge the contents of [`examples/claude-hooks.snippet.json`](examples/claude-hooks.snippet.json) into `~/.claude/settings.json`.
 
-- `UserPromptSubmit` -> `agent-poke state --agent claude --state running`
-- `PermissionRequest` -> `agent-poke state --agent claude --state needs-input`
-- `Stop` -> `agent-poke state --agent claude --state done`
+The hooks tell agent-poke when Claude starts working, asks for permission, or finishes.
+</details>
 
-Reference template: `examples/claude-hooks.snippet.json`.
+<details>
+<summary><b>OpenCode</b></summary>
 
-## Configure OpenCode (recommended)
+Copy [`examples/opencode-plugin.js`](examples/opencode-plugin.js) to:
 
-OpenCode integration is plugin-based. Copy `examples/opencode-plugin.js` to one of:
+- `~/.config/opencode/plugins/agent-poke.js` (global), or
+- `.opencode/plugins/agent-poke.js` (project-local)
+</details>
 
-- `~/.config/opencode/plugins/agent-poke.js` (global)
-- `.opencode/plugins/agent-poke.js` (project)
+<details>
+<summary><b>Codex</b></summary>
 
-The plugin forwards OpenCode events to `agent-poke`:
-
-- transition events update state (`running`, `needs-input`, `done`)
-- other events are treated as heartbeat-only updates while a pane is active
-
-
-## Configure Codex (optional compatibility)
-
-If you also use Codex, point notify to the adapter script in your config (for example `~/.codex/config.toml`):
+Add to `~/.codex/config.toml`:
 
 ```toml
-notify = ["bash", "/absolute/path/to/agent-poke/examples/codex-notify.sh"]
+notify = ["bash", "/absolute/path/to/examples/codex-notify.sh"]
 ```
 
-Current Codex notifies by invoking the command with a JSON payload argument (for example `{"type":"agent-turn-complete",...}`). The adapter handles this format and also accepts older plain-string event names.
+See [`examples/codex-notify.sh`](examples/codex-notify.sh) for the adapter script.
+</details>
 
-Reference templates: `examples/codex-notify.sh` and `examples/codex-config.snippet.toml`.
+That's it. Open a tmux window, start your agent, and watch the glyphs appear.
 
-## Useful tmux options
+## Customization
 
-```tmux
-# Window-status glyphs (defaults: running='🔄', needs-input='⏸️', done='✅')
-set -g @agent-indicator-window-status-running-glyph '🔄'
-set -g @agent-indicator-window-status-needs-input-glyph '⏸️'
-set -g @agent-indicator-window-status-done-glyph '✅'
+All options are set as tmux user variables. See [`examples/tmux.conf.snippet`](examples/tmux.conf.snippet) for the full reference.
 
-# Heartbeat/liveness tuning
-set -g @agent-indicator-running-heartbeat-timeout-ms '30000'
-set -g @agent-indicator-closed-retention-ms '900000'
-
-# Notification behavior
-# Keep notifications sticky until dismissed (default: off)
-set -g @agent-indicator-notification-persistent 'off'
-
-# Urgency level (default: critical)
-set -g @agent-indicator-notification-urgency 'critical'
-
-# Sound hint (default: off)
-set -g @agent-indicator-notification-sound 'off'
-
-# Optional freedesktop sound name when sound is on
-set -g @agent-indicator-notification-sound-name 'dialog-information'
-```
-
-System notification format is fixed:
-
-- title: `opencode` / `claude` (agent name)
-- body: `[Done|Needs Attention] <session> > <window>`
-
-## Current command surface
-
-```bash
-agent-poke state --agent claude --state running
-agent-poke state --agent claude --state needs-input
-agent-poke state --agent claude --state done
-agent-poke state --agent claude --state idle
-agent-poke state --agent claude --state closed
-
-agent-poke opencode-event --event session.status --status busy --event-ts-ms 1730000000000
-agent-poke opencode-event --event permission.asked --event-ts-ms 1730000000001
-agent-poke opencode-event --event session.idle --event-ts-ms 1730000000002
-
-agent-poke window-status --window @1
-agent-poke focus-reset --pane %1 --window @1
-agent-poke debug stress --iterations 50 --sleep-ms 10
-agent-poke debug state
-agent-poke debug poll --interval-ms 500
-agent-poke debug clear-state
-```
+| Variable | Default | Description |
+|---|---|---|
+| `@agent-indicator-window-status-running-glyph` | `🔄` | Glyph while agent is working |
+| `@agent-indicator-window-status-needs-input-glyph` | `⏸️` | Glyph when agent needs attention |
+| `@agent-indicator-window-status-done-glyph` | `✅` | Glyph when agent finishes |
+| `@agent-indicator-running-heartbeat-timeout-ms` | `30000` | Heartbeat timeout before marking stale |
+| `@agent-indicator-notification-persistent` | `off` | Keep desktop notifications until dismissed |
+| `@agent-indicator-notification-urgency` | `critical` | Desktop notification urgency level |
+| `@agent-indicator-notification-sound` | `off` | Play a sound on notification |
 
 ## Development
 
@@ -159,7 +76,3 @@ cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
 ```
-
-## Plan
-
-See `PLAN.md` for the phased implementation roadmap.

@@ -4,14 +4,10 @@ use anyhow::Result;
 use clap::Args;
 
 use crate::cli::commands::state_cleanup;
+use crate::config::{DEFAULT_DONE_GLYPH, DEFAULT_IDLE_GLYPH, DEFAULT_NEEDS_INPUT_GLYPH, DEFAULT_RUNNING_GLYPH};
 use crate::core::env_keys;
 use crate::core::AgentState;
 use crate::tmux::Tmux;
-
-const IDLE_EMOJI: &str = "☑️";
-const RUNNING_EMOJI: &str = "🔄";
-const NEEDS_INPUT_EMOJI: &str = "⏸️";
-const DONE_EMOJI: &str = "✅";
 
 #[derive(Debug, Args)]
 pub struct PaneStatusCommand;
@@ -31,15 +27,15 @@ impl PaneStatusCommand {
 
         let counts = counts_for_live_panes(&live_pane_ids, &env_pairs);
 
-        let mut parts = vec![format!("{IDLE_EMOJI}: {}", counts.idle)];
+        let mut parts = vec![format!("{DEFAULT_IDLE_GLYPH}: {}", counts.idle)];
         if counts.running > 0 {
-            parts.push(format!("{RUNNING_EMOJI}: {}", counts.running));
+            parts.push(format!("{DEFAULT_RUNNING_GLYPH}: {}", counts.running));
         }
         if counts.needs_input > 0 {
-            parts.push(format!("{NEEDS_INPUT_EMOJI}: {}", counts.needs_input));
+            parts.push(format!("{DEFAULT_NEEDS_INPUT_GLYPH}: {}", counts.needs_input));
         }
         if counts.done > 0 {
-            parts.push(format!("{DONE_EMOJI}: {}", counts.done));
+            parts.push(format!("{DEFAULT_DONE_GLYPH}: {}", counts.done));
         }
         println!("{}", parts.join(" "));
         Ok(())

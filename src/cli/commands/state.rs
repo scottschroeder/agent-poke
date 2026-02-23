@@ -19,6 +19,9 @@ pub struct StateCommand {
 
     #[arg(long)]
     pane: Option<String>,
+
+    #[arg(long)]
+    event: Option<String>,
 }
 
 impl StateCommand {
@@ -27,7 +30,12 @@ impl StateCommand {
             .state
             .parse::<AgentState>()
             .map_err(anyhow::Error::msg)?;
-        run_state(self.agent, state, self.pane)
+        run_state(
+            self.agent,
+            state,
+            self.pane,
+            self.event.as_deref(),
+        )
     }
 }
 
@@ -35,8 +43,9 @@ pub(crate) fn run_state(
     agent: String,
     input_state: AgentState,
     pane: Option<String>,
+    event: Option<&str>,
 ) -> Result<()> {
-    run_state_impl(agent, input_state, pane, true)
+    run_state_impl(agent, input_state, pane, event, true)
 }
 
 pub(crate) fn run_state_prepared(
@@ -44,13 +53,14 @@ pub(crate) fn run_state_prepared(
     input_state: AgentState,
     pane: Option<String>,
 ) -> Result<()> {
-    run_state_impl(agent, input_state, pane, false)
+    run_state_impl(agent, input_state, pane, None, false)
 }
 
 fn run_state_impl(
     agent: String,
     input_state: AgentState,
     pane: Option<String>,
+    event: Option<&str>,
     run_maintenance: bool,
 ) -> Result<()> {
     let tmux = Tmux::new();
@@ -83,6 +93,17 @@ fn run_state_impl(
             state
         );
     }
+
+    log::info!(
+        "transition agent={} pane={} {:?} -> {}{}",
+        agent,
+        pane_id,
+        previous_state.map(|s| s.as_str()).unwrap_or("None"),
+        state,
+        event
+            .map(|e| format!(" event={e}"))
+            .unwrap_or_default(),
+    );
 
     let previous_agent = tmux.show_env_global(&pane_keys.agent)?;
     let now_ms = now_epoch_millis();

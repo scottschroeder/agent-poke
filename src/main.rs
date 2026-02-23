@@ -14,9 +14,24 @@ fn init_logging(verbose: u8) {
     };
 
     let env = env_logger::Env::default().default_filter_or(level);
-    env_logger::Builder::from_env(env)
-        .format_timestamp(None)
-        .init();
+    let mut builder = env_logger::Builder::from_env(env);
+
+    if let Ok(log_file) = std::env::var("AGENT_POKE_LOG_FILE") {
+        use std::fs::OpenOptions;
+        if let Ok(file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+        {
+            builder.target(env_logger::Target::Pipe(Box::new(file)));
+        } else {
+            eprintln!("agent-poke: failed to open log file: {log_file}");
+        }
+    } else {
+        builder.format_timestamp(None);
+    }
+
+    builder.init();
 }
 
 fn main() -> anyhow::Result<()> {

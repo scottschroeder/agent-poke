@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke state --agent claude --state running"
+            "command": "agent-poke state --agent claude --state idle --event SessionStart"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke state --agent claude --state running"
+            "command": "agent-poke state --agent claude --state running --event UserPromptSubmit"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke state --agent claude --state needs-input"
+            "command": "agent-poke state --agent claude --state needs-input --event PermissionRequest"
           }
         ]
       }
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke state --agent claude --state done"
+            "command": "agent-poke state --agent claude --state done --event Stop"
           }
         ]
       }
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke state --agent claude --state idle"
+            "command": "agent-poke state --agent claude --state closed --event SessionEnd"
           }
         ]
       }
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke heartbeat --agent claude --event PreToolUse"
+            "command": "agent-poke state --agent claude --state running --event PreToolUse"
           }
         ]
       }
@@ -65,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke heartbeat --agent claude --event PostToolUse"
+            "command": "agent-poke state --agent claude --state running --event PostToolUse"
           }
         ]
       }
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke heartbeat --agent claude --event SubagentStart"
+            "command": "agent-poke state --agent claude --state running --event SubagentStart"
           }
         ]
       }
@@ -125,7 +125,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-poke heartbeat --agent claude --event Notification"
+            "command": "agent-poke state --agent claude --state needs-input --event Notification"
           }
         ]
       }

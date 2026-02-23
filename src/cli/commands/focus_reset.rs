@@ -50,6 +50,11 @@ impl FocusResetCommand {
         };
 
         if matches!(state, AgentState::Done | AgentState::NeedsInput) {
+            log::info!(
+                "focus-reset pane={} {} -> idle",
+                pane_id,
+                state,
+            );
             if let Some(notification_id) = tmux.show_env_global(&pane_keys.notification_id)? {
                 notify::clear_system_notification(&notification_id);
             }

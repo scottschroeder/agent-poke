@@ -1,6 +1,11 @@
 use crate::core::AgentState;
 use crate::tmux::Tmux;
 
+pub const DEFAULT_IDLE_GLYPH: &str = "💤";
+pub const DEFAULT_RUNNING_GLYPH: &str = "🔄";
+pub const DEFAULT_NEEDS_INPUT_GLYPH: &str = "🔔";
+pub const DEFAULT_DONE_GLYPH: &str = "✅";
+
 #[derive(Debug, Clone)]
 pub struct WindowStatusGlyphConfig {
     pub running: String,
@@ -31,13 +36,13 @@ pub fn enabled(tmux: &Tmux, option: &str, default: bool) -> bool {
 
 pub fn window_status_glyphs(tmux: &Tmux) -> WindowStatusGlyphConfig {
     WindowStatusGlyphConfig {
-        running: option_or_default(tmux, "@agent-indicator-window-status-running-glyph", "🔄"),
+        running: option_or_default(tmux, "@agent-indicator-window-status-running-glyph", DEFAULT_RUNNING_GLYPH),
         needs_input: option_or_default(
             tmux,
             "@agent-indicator-window-status-needs-input-glyph",
-            "⏸️",
+            DEFAULT_NEEDS_INPUT_GLYPH,
         ),
-        done: option_or_default(tmux, "@agent-indicator-window-status-done-glyph", "✅"),
+        done: option_or_default(tmux, "@agent-indicator-window-status-done-glyph", DEFAULT_DONE_GLYPH),
     }
 }
 

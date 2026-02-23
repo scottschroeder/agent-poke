@@ -28,6 +28,15 @@ pub fn cleanup_stale_state(tmux: &Tmux, clear_notifications: bool) -> Result<usi
         }
     }
 
+    if !stale_pane_ids.is_empty() {
+        log::info!(
+            "cleanup stale panes: {:?} ({} keys, {} bindings)",
+            stale_pane_ids,
+            stale_pane_keys.len(),
+            stale_binding_keys.len(),
+        );
+    }
+
     for key in &stale_pane_keys {
         tmux.unset_env_global(key)?;
     }
@@ -56,6 +65,11 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
         };
 
         if !live_pane_ids.contains(&pane_id) {
+            log::info!(
+                "reconcile pane={} {} -> closed (pane gone)",
+                pane_id,
+                state,
+            );
             set_closed_state(tmux, &pane_id, now_ms)?;
             touched += 1;
             continue;
@@ -67,6 +81,10 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
                 .and_then(|value| value.parse::<u64>().ok())
                 .unwrap_or(now_ms);
             if now_ms.saturating_sub(closed_ts) >= closed_retention_ms {
+                log::info!(
+                    "reconcile pane={} closed -> cleared (retention expired)",
+                    pane_id,
+                );
                 clear_pane_state(tmux, &pane_id)?;
                 touched += 1;
             }
@@ -74,6 +92,11 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
         }
 
         if !pane_process_looks_alive(tmux, &pane_id, &keys)? {
+            log::info!(
+                "reconcile pane={} {} -> closed (process dead)",
+                pane_id,
+                state,
+            );
             set_closed_state(tmux, &pane_id, now_ms)?;
             touched += 1;
             continue;
@@ -90,6 +113,12 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
                 .and_then(|value| value.parse::<u64>().ok())
                 .unwrap_or(now_ms);
             if now_ms.saturating_sub(heartbeat_ts) >= running_timeout_ms {
+                log::info!(
+                    "reconcile pane={} agent={} running -> idle (heartbeat timeout {}ms)",
+                    pane_id,
+                    agent,
+                    now_ms.saturating_sub(heartbeat_ts),
+                );
                 tmux.set_env_global(&keys.state, AgentState::Idle.as_str())?;
                 touched += 1;
             }

@@ -29,7 +29,7 @@ impl HeartbeatCommand {
         let keys = PaneEnvKeys::new(&pane_id);
 
         let Some(raw_state) = tmux.show_env_global(&keys.state)? else {
-            log::debug!(
+            log::info!(
                 "heartbeat: no state for pane={} agent={} event={:?}, skipping",
                 pane_id,
                 self.agent,
@@ -42,7 +42,7 @@ impl HeartbeatCommand {
         };
 
         if state != AgentState::Running {
-            log::debug!(
+            log::info!(
                 "heartbeat: pane={} state={} (not running), skipping event={:?}",
                 pane_id,
                 state.as_str(),
@@ -54,7 +54,7 @@ impl HeartbeatCommand {
         let now_ms = now_epoch_millis();
         tmux.set_env_global(&keys.last_heartbeat_ts_ms, &now_ms.to_string())?;
 
-        log::debug!(
+        log::info!(
             "heartbeat: updated pane={} agent={} event={:?} ts_ms={}",
             pane_id,
             self.agent,
