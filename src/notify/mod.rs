@@ -13,7 +13,7 @@ pub struct NotifyOptions {
 pub fn notify_system(title: &str, body: &str, options: &NotifyOptions) -> Result<Option<String>> {
     match std::env::consts::OS {
         "macos" => {
-            notify_macos(title, body)?;
+            notify_macos(title, body, options)?;
             Ok(None)
         }
         "linux" => Ok(notify_linux(title, body, options)),
@@ -45,10 +45,25 @@ pub fn clear_system_notification(notification_id: &str) {
         .output();
 }
 
-fn notify_macos(title: &str, body: &str) -> Result<()> {
+fn notify_macos(title: &str, body: &str, options: &NotifyOptions) -> Result<()> {
     let escaped_title = title.replace('"', "\\\"");
     let escaped_body = body.replace('"', "\\\"");
-    let script = format!("display notification \"{escaped_body}\" with title \"{escaped_title}\"");
+
+    let sound_part = if options.sound {
+        let sound_name = options
+            .sound_name
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Glass");
+        let escaped_sound = sound_name.replace('"', "\\\"");
+        format!(" sound name \"{escaped_sound}\"")
+    } else {
+        String::new()
+    };
+
+    let script = format!(
+        "display notification \"{escaped_body}\" with title \"{escaped_title}\"{sound_part}"
+    );
 
     let _ = Command::new("osascript").arg("-e").arg(script).output()?;
     Ok(())
