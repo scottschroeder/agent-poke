@@ -71,7 +71,7 @@ pub fn notification_urgency(tmux: &Tmux) -> String {
 }
 
 pub fn notification_sound_enabled(tmux: &Tmux) -> bool {
-    enabled(tmux, "@agent-indicator-notification-sound", false)
+    enabled(tmux, "@agent-indicator-notification-sound", true)
 }
 
 pub fn notification_sound_name(tmux: &Tmux) -> Option<String> {

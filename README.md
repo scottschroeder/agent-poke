@@ -75,7 +75,7 @@ All options are set as tmux user variables. See [`examples/tmux.conf.snippet`](e
 | `@agent-indicator-running-heartbeat-timeout-ms` | `30000` | Heartbeat timeout before marking stale |
 | `@agent-indicator-notification-persistent` | `off` | Keep desktop notifications until dismissed |
 | `@agent-indicator-notification-urgency` | `critical` | Desktop notification urgency level |
-| `@agent-indicator-notification-sound` | `off` | Play a sound on notification |
+| `@agent-indicator-notification-sound` | `on` | Play a sound on notification |
 
 ## Development
 
