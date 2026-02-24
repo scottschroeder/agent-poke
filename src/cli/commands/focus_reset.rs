@@ -1,12 +1,11 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::cli::commands::state::now_epoch_millis;
 use crate::cli::commands::state_cleanup;
 use crate::core::AgentState;
 use crate::core::env_keys::PaneEnvKeys;
+use crate::core::util::now_epoch_millis;
 use crate::notify;
-use crate::tmux::Tmux;
 
 #[derive(Debug, Args)]
 pub struct FocusResetCommand {
@@ -19,13 +18,9 @@ pub struct FocusResetCommand {
 
 impl FocusResetCommand {
     pub fn run(self) -> Result<()> {
-        let tmux = Tmux::new();
-        if !tmux.is_available() {
+        let Some(tmux) = state_cleanup::prepare_with_maintenance(true)? else {
             return Ok(());
-        }
-
-        state_cleanup::cleanup_stale_state(&tmux, true)?;
-        state_cleanup::reconcile_state(&tmux)?;
+        };
 
         let pane_id = self
             .pane

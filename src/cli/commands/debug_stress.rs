@@ -3,11 +3,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::cli::commands::state::resolve_pane_id;
+use crate::core::util::now_epoch_millis;
 use crate::tmux::Tmux;
 
 #[derive(Debug, Args)]
@@ -270,21 +272,6 @@ fn build_steps(agent: &str, pane: &str, window: &str, base_ts: u64) -> Vec<Step>
     ]
 }
 
-fn resolve_pane_id(tmux: &Tmux, pane: Option<&str>) -> Result<String> {
-    if let Some(pane) = pane {
-        return Ok(pane.to_string());
-    }
-
-    if let Ok(from_env) = std::env::var("TMUX_PANE")
-        && !from_env.is_empty()
-    {
-        return Ok(from_env);
-    }
-
-    tmux.display_current("#{pane_id}")
-        .context("failed to resolve current tmux pane id")
-}
-
 fn current_focus(tmux: &Tmux) -> Result<(String, String)> {
     Ok((
         tmux.display_current("#{pane_id}")?,
@@ -299,13 +286,6 @@ fn default_log_path() -> PathBuf {
         .join("state")
         .join("agent-poke")
         .join("debug-stress.log")
-}
-
-fn now_epoch_millis() -> u64 {
-    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        return 0;
-    };
-    duration.as_millis() as u64
 }
 
 fn shell_escape(value: &str) -> String {

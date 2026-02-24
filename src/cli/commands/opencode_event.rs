@@ -1,14 +1,14 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::cli::commands::state::run_state_prepared;
-use crate::cli::commands::state::{now_epoch_millis, resolve_pane_id};
+use crate::cli::commands::state::{resolve_pane_id, run_state_prepared};
 use crate::cli::commands::state_cleanup;
 use crate::core::AgentState;
 use crate::core::env_keys::PaneEnvKeys;
 use crate::core::event_guard::{
     DEFAULT_LOCK_TIMEOUT, EventApplyOutcome, EventGuard, state_priority,
 };
+use crate::core::util::now_epoch_millis;
 use crate::tmux::Tmux;
 
 #[derive(Debug, Args)]
@@ -48,13 +48,9 @@ pub(crate) fn run_opencode_event(
     pane: Option<String>,
     event_ts_ms: Option<u64>,
 ) -> Result<()> {
-    let tmux = Tmux::new();
-    if !tmux.is_available() {
+    let Some(tmux) = state_cleanup::prepare_with_maintenance(false)? else {
         return Ok(());
-    }
-
-    state_cleanup::cleanup_stale_state(&tmux, false)?;
-    state_cleanup::reconcile_state(&tmux)?;
+    };
 
     let pane_id = resolve_pane_id(&tmux, pane.as_deref())?;
     let event_ts_ms = event_ts_ms.unwrap_or_else(now_epoch_millis);

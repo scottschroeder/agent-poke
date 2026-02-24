@@ -12,13 +12,9 @@ pub struct DebugStateCommand;
 
 impl DebugStateCommand {
     pub fn run(self) -> Result<()> {
-        let tmux = Tmux::new();
-        if !tmux.is_available() {
+        let Some(tmux) = state_cleanup::prepare_with_maintenance(false)? else {
             return Ok(());
-        }
-
-        state_cleanup::cleanup_stale_state(&tmux, false)?;
-        state_cleanup::reconcile_state(&tmux)?;
+        };
 
         let env_pairs = tmux.show_env_global_all()?;
         let mut agent_env: BTreeMap<String, String> = BTreeMap::new();

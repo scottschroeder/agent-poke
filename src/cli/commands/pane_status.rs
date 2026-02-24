@@ -7,20 +7,15 @@ use crate::cli::commands::state_cleanup;
 use crate::config::{DEFAULT_DONE_GLYPH, DEFAULT_IDLE_GLYPH, DEFAULT_NEEDS_INPUT_GLYPH, DEFAULT_RUNNING_GLYPH};
 use crate::core::env_keys;
 use crate::core::AgentState;
-use crate::tmux::Tmux;
 
 #[derive(Debug, Args)]
 pub struct PaneStatusCommand;
 
 impl PaneStatusCommand {
     pub fn run(self) -> Result<()> {
-        let tmux = Tmux::new();
-        if !tmux.is_available() {
+        let Some(tmux) = state_cleanup::prepare_with_maintenance(false)? else {
             return Ok(());
-        }
-
-        state_cleanup::cleanup_stale_state(&tmux, false)?;
-        state_cleanup::reconcile_state(&tmux)?;
+        };
 
         let live_pane_ids = tmux.list_all_pane_ids()?;
         let env_pairs = tmux.show_env_global_all()?;

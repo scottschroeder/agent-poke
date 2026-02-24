@@ -5,7 +5,9 @@ use anyhow::Result;
 use crate::config;
 use crate::core::AgentState;
 use crate::core::env_keys::{PaneEnvKeys, active_pane_key};
+use crate::core::reconcile::{PaneReconcileInput, ReconcileAction, reconcile_pane};
 use crate::core::stale;
+use crate::core::util::now_epoch_millis;
 use crate::notify;
 use crate::tmux::Tmux;
 
@@ -64,23 +66,45 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
             continue;
         };
 
-        if !live_pane_ids.contains(&pane_id) {
-            log::info!(
-                "reconcile pane={} {} -> closed (pane gone)",
-                pane_id,
-                state,
-            );
-            set_closed_state(tmux, &pane_id, now_ms)?;
-            touched += 1;
-            continue;
-        }
+        let pane_alive = live_pane_ids.contains(&pane_id);
+        let process_alive = if pane_alive && state != AgentState::Closed {
+            pane_process_looks_alive(tmux, &pane_id, &keys)?
+        } else {
+            true
+        };
+        let closed_ts_ms = tmux
+            .show_env_global(&keys.closed_ts_ms)?
+            .and_then(|v| v.parse::<u64>().ok());
+        let heartbeat_ts_ms = tmux
+            .show_env_global(&keys.last_heartbeat_ts_ms)?
+            .and_then(|v| v.parse::<u64>().ok());
+        let running_timeout_ms = if state == AgentState::Running {
+            let agent = tmux.show_env_global(&keys.agent)?.unwrap_or_default();
+            config::running_heartbeat_timeout_ms_for_agent(tmux, &agent)
+        } else {
+            0
+        };
 
-        if state == AgentState::Closed {
-            let closed_ts = tmux
-                .show_env_global(&keys.closed_ts_ms)?
-                .and_then(|value| value.parse::<u64>().ok())
-                .unwrap_or(now_ms);
-            if now_ms.saturating_sub(closed_ts) >= closed_retention_ms {
+        let action = reconcile_pane(&PaneReconcileInput {
+            pane_alive,
+            state,
+            process_alive,
+            closed_ts_ms,
+            heartbeat_ts_ms,
+            now_ms,
+            closed_retention_ms,
+            running_timeout_ms,
+        });
+
+        match action {
+            ReconcileAction::None => {}
+            ReconcileAction::SetClosed => {
+                let reason = if !pane_alive { "pane gone" } else { "process dead" };
+                log::info!("reconcile pane={} {} -> closed ({})", pane_id, state, reason);
+                set_closed_state(tmux, &pane_id, now_ms)?;
+                touched += 1;
+            }
+            ReconcileAction::ClearState => {
                 log::info!(
                     "reconcile pane={} closed -> cleared (retention expired)",
                     pane_id,
@@ -88,36 +112,13 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
                 clear_pane_state(tmux, &pane_id)?;
                 touched += 1;
             }
-            continue;
-        }
-
-        if !pane_process_looks_alive(tmux, &pane_id, &keys)? {
-            log::info!(
-                "reconcile pane={} {} -> closed (process dead)",
-                pane_id,
-                state,
-            );
-            set_closed_state(tmux, &pane_id, now_ms)?;
-            touched += 1;
-            continue;
-        }
-
-        if state == AgentState::Running {
-            let agent = tmux
-                .show_env_global(&keys.agent)?
-                .unwrap_or_default();
-            let running_timeout_ms =
-                config::running_heartbeat_timeout_ms_for_agent(tmux, &agent);
-            let heartbeat_ts = tmux
-                .show_env_global(&keys.last_heartbeat_ts_ms)?
-                .and_then(|value| value.parse::<u64>().ok())
-                .unwrap_or(now_ms);
-            if now_ms.saturating_sub(heartbeat_ts) >= running_timeout_ms {
+            ReconcileAction::SetIdle => {
+                let agent = tmux.show_env_global(&keys.agent)?.unwrap_or_default();
                 log::info!(
                     "reconcile pane={} agent={} running -> idle (heartbeat timeout {}ms)",
                     pane_id,
                     agent,
-                    now_ms.saturating_sub(heartbeat_ts),
+                    now_ms.saturating_sub(heartbeat_ts_ms.unwrap_or(now_ms)),
                 );
                 tmux.set_env_global(&keys.state, AgentState::Idle.as_str())?;
                 touched += 1;
@@ -177,7 +178,7 @@ fn pane_process_looks_alive(tmux: &Tmux, pane_id: &str, keys: &PaneEnvKeys) -> R
     Ok(true)
 }
 
-fn set_closed_state(tmux: &Tmux, pane_id: &str, now_ms: u64) -> Result<()> {
+pub(crate) fn set_closed_state(tmux: &Tmux, pane_id: &str, now_ms: u64) -> Result<()> {
     let keys = PaneEnvKeys::new(pane_id);
     if let Some(agent) = tmux.show_env_global(&keys.agent)? {
         tmux.unset_env_global(&active_pane_key(&agent))?;
@@ -219,11 +220,15 @@ fn clear_pane_state(tmux: &Tmux, pane_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn now_epoch_millis() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        return 0;
-    };
-    duration.as_millis() as u64
+/// Creates a `Tmux` handle, checks availability, and runs stale cleanup + reconciliation.
+/// Returns `Ok(None)` if tmux is not available (the caller should exit gracefully).
+pub fn prepare_with_maintenance(clear_notifications: bool) -> Result<Option<Tmux>> {
+    let tmux = Tmux::new();
+    if !tmux.is_available() {
+        return Ok(None);
+    }
+    cleanup_stale_state(&tmux, clear_notifications)?;
+    reconcile_state(&tmux)?;
+    Ok(Some(tmux))
 }
+

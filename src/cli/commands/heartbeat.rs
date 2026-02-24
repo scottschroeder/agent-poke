@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::cli::commands::state::{now_epoch_millis, resolve_pane_id};
+use crate::cli::commands::state::resolve_pane_id;
+use crate::core::util::now_epoch_millis;
 use crate::core::AgentState;
 use crate::core::env_keys::PaneEnvKeys;
 use crate::tmux::Tmux;

@@ -5,6 +5,7 @@ use crate::cli::commands::state_cleanup;
 use crate::config;
 use crate::core::AgentState;
 use crate::core::env_keys::{PaneEnvKeys, active_pane_key};
+use crate::core::util::now_epoch_millis;
 use crate::notify;
 use crate::notify::NotifyOptions;
 use crate::tmux::Tmux;
@@ -109,19 +110,7 @@ fn run_state_impl(
     let now_ms = now_epoch_millis();
 
     if state == AgentState::Closed {
-        if let Some(notification_id) = tmux.show_env_global(&pane_keys.notification_id)? {
-            notify::clear_system_notification(&notification_id);
-        }
-
-        tmux.set_env_global(&pane_keys.state, state.as_str())?;
-        tmux.set_env_global(&pane_keys.closed_ts_ms, &now_ms.to_string())?;
-        tmux.unset_env_global(&pane_keys.done)?;
-        tmux.unset_env_global(&pane_keys.done_window)?;
-        tmux.unset_env_global(&pane_keys.pending_reset)?;
-        tmux.unset_env_global(&pane_keys.notification_id)?;
-        tmux.unset_env_global(&pane_keys.last_notified_state)?;
-
-        tmux.unset_env_global(&active_pane_key(&agent))?;
+        state_cleanup::set_closed_state(&tmux, &pane_id, now_ms)?;
         if let Some(previous_agent) = previous_agent.as_deref()
             && previous_agent != agent
         {
@@ -225,15 +214,6 @@ pub(crate) fn resolve_pane_id(tmux: &Tmux, pane: Option<&str>) -> Result<String>
 
     tmux.display_current("#{pane_id}")
         .context("failed to resolve current tmux pane id")
-}
-
-pub(crate) fn now_epoch_millis() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        return 0;
-    };
-    duration.as_millis() as u64
 }
 
 fn new_instance_id(pane_id: &str, now_ms: u64) -> String {

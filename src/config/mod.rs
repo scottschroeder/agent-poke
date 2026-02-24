@@ -14,14 +14,6 @@ pub struct WindowStatusGlyphConfig {
 }
 
 pub fn option_or_default(tmux: &Tmux, option: &str, default: &str) -> String {
-    if tmux.option_is_set_global(option) {
-        return tmux
-            .show_option_global(option)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-    }
-
     tmux.show_option_global(option)
         .ok()
         .flatten()
@@ -31,7 +23,7 @@ pub fn option_or_default(tmux: &Tmux, option: &str, default: &str) -> String {
 pub fn enabled(tmux: &Tmux, option: &str, default: bool) -> bool {
     let raw_default = if default { "on" } else { "off" };
     let value = option_or_default(tmux, option, raw_default);
-    matches!(value.as_str(), "on" | "true" | "yes" | "1")
+    parse_bool(&value)
 }
 
 pub fn window_status_glyphs(tmux: &Tmux) -> WindowStatusGlyphConfig {
@@ -56,10 +48,7 @@ pub fn state_notification_enabled(tmux: &Tmux, state: AgentState) -> bool {
         "@agent-indicator-notification-states",
         "needs-input,done",
     );
-    states
-        .split(',')
-        .map(str::trim)
-        .any(|configured| configured == state.as_str())
+    state_in_list(state, &states)
 }
 
 pub fn notification_persistent(tmux: &Tmux) -> bool {
@@ -88,15 +77,12 @@ pub fn state_enabled(tmux: &Tmux, state: AgentState) -> bool {
 }
 
 pub fn running_heartbeat_timeout_ms(tmux: &Tmux) -> u64 {
-    option_or_default(
+    let raw = option_or_default(
         tmux,
         "@agent-indicator-running-heartbeat-timeout-ms",
         "60000",
-    )
-    .parse::<u64>()
-    .ok()
-    .filter(|value| *value > 0)
-    .unwrap_or(60000)
+    );
+    parse_positive_u64(&raw, 60000)
 }
 
 const DEFAULT_HEARTBEAT_TIMEOUT_MS: u64 = 60_000;
@@ -130,9 +116,97 @@ pub fn running_heartbeat_timeout_ms_for_agent(tmux: &Tmux, agent: &str) -> u64 {
 }
 
 pub fn closed_retention_ms(tmux: &Tmux) -> u64 {
-    option_or_default(tmux, "@agent-indicator-closed-retention-ms", "900000")
+    let raw = option_or_default(tmux, "@agent-indicator-closed-retention-ms", "900000");
+    parse_positive_u64(&raw, 900000)
+}
+
+fn parse_bool(value: &str) -> bool {
+    matches!(value, "on" | "true" | "yes" | "1")
+}
+
+fn parse_positive_u64(value: &str, default: u64) -> u64 {
+    value
         .parse::<u64>()
         .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(900000)
+        .filter(|v| *v > 0)
+        .unwrap_or(default)
+}
+
+fn state_in_list(state: AgentState, list: &str) -> bool {
+    list.split(',')
+        .map(str::trim)
+        .any(|configured| configured == state.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{builtin_agent_heartbeat_timeout_ms, parse_bool, parse_positive_u64, state_in_list};
+    use crate::core::AgentState;
+
+    #[test]
+    fn parse_bool_truthy_values() {
+        assert!(parse_bool("on"));
+        assert!(parse_bool("true"));
+        assert!(parse_bool("yes"));
+        assert!(parse_bool("1"));
+    }
+
+    #[test]
+    fn parse_bool_falsy_values() {
+        assert!(!parse_bool("off"));
+        assert!(!parse_bool("false"));
+        assert!(!parse_bool("no"));
+        assert!(!parse_bool("0"));
+        assert!(!parse_bool(""));
+        assert!(!parse_bool("random"));
+    }
+
+    #[test]
+    fn parse_positive_u64_valid() {
+        assert_eq!(parse_positive_u64("60000", 999), 60000);
+        assert_eq!(parse_positive_u64("1", 999), 1);
+    }
+
+    #[test]
+    fn parse_positive_u64_zero_returns_default() {
+        assert_eq!(parse_positive_u64("0", 42), 42);
+    }
+
+    #[test]
+    fn parse_positive_u64_invalid_returns_default() {
+        assert_eq!(parse_positive_u64("abc", 42), 42);
+        assert_eq!(parse_positive_u64("", 42), 42);
+        assert_eq!(parse_positive_u64("-1", 42), 42);
+    }
+
+    #[test]
+    fn state_in_list_finds_present_state() {
+        assert!(state_in_list(AgentState::Done, "needs-input,done"));
+        assert!(state_in_list(AgentState::NeedsInput, "needs-input,done"));
+    }
+
+    #[test]
+    fn state_in_list_rejects_absent_state() {
+        assert!(!state_in_list(AgentState::Running, "needs-input,done"));
+        assert!(!state_in_list(AgentState::Idle, "needs-input,done"));
+    }
+
+    #[test]
+    fn state_in_list_handles_whitespace() {
+        assert!(state_in_list(AgentState::Done, "needs-input , done"));
+        assert!(state_in_list(AgentState::NeedsInput, " needs-input , done "));
+    }
+
+    #[test]
+    fn state_in_list_single_value() {
+        assert!(state_in_list(AgentState::Done, "done"));
+        assert!(!state_in_list(AgentState::Running, "done"));
+    }
+
+    #[test]
+    fn builtin_claude_timeout_is_longer() {
+        assert_eq!(builtin_agent_heartbeat_timeout_ms("claude"), 150_000);
+        assert_eq!(builtin_agent_heartbeat_timeout_ms("opencode"), 60_000);
+        assert_eq!(builtin_agent_heartbeat_timeout_ms("unknown"), 60_000);
+    }
 }
