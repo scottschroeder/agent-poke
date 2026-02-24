@@ -91,19 +91,19 @@ pub fn running_heartbeat_timeout_ms(tmux: &Tmux) -> u64 {
     option_or_default(
         tmux,
         "@agent-indicator-running-heartbeat-timeout-ms",
-        "30000",
+        "60000",
     )
     .parse::<u64>()
     .ok()
     .filter(|value| *value > 0)
-    .unwrap_or(30000)
+    .unwrap_or(60000)
 }
 
-const DEFAULT_HEARTBEAT_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_HEARTBEAT_TIMEOUT_MS: u64 = 60_000;
 
 fn builtin_agent_heartbeat_timeout_ms(agent: &str) -> u64 {
     match agent {
-        "claude" => 300_000,
+        "claude" => 150_000,
         _ => DEFAULT_HEARTBEAT_TIMEOUT_MS,
     }
 }

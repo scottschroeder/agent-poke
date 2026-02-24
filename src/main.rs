@@ -25,17 +25,20 @@ fn init_logging(verbose: u8) {
         {
             builder.target(env_logger::Target::Pipe(Box::new(file)));
         } else {
-            eprintln!("agent-poke: failed to open log file: {log_file}");
+            builder.target(env_logger::Target::Pipe(Box::new(std::io::sink())));
         }
     } else {
-        builder.format_timestamp(None);
+        builder.target(env_logger::Target::Pipe(Box::new(std::io::sink())));
     }
 
     builder.init();
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let cli = cli::Cli::parse();
     init_logging(cli.verbose);
-    cli.run()
+    if let Err(e) = cli.run() {
+        log::error!("{e:#}");
+        std::process::exit(1);
+    }
 }

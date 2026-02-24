@@ -2,7 +2,7 @@
 
 See at a glance which tmux windows have coding agents that are running, waiting for input, or finished — with emoji indicators right in your tab bar.
 
-`🔄 1:project` agent working · `⏸️ 2:project` needs your attention · `✅ 3:project` done
+`🔄 1:project` agent working · `🔔 2:project` needs your attention · `✅ 3:project` done
 
 ## Quickstart
 
@@ -14,7 +14,30 @@ cargo install --git https://github.com/scottschroeder/agent-poke
 
 ### 2. Add to `~/.tmux.conf`
 
-Paste the contents of [`examples/tmux.conf.snippet`](examples/tmux.conf.snippet) into your `~/.tmux.conf`, then reload:
+There are three pieces to wire up. See [`examples/tmux.conf.snippet`](examples/tmux.conf.snippet) for a copy-pasteable version.
+
+**Set the binary path** so later lines can reference it:
+
+```tmux
+set -g @agent-poke-bin "$HOME/.cargo/bin/agent-poke"
+```
+
+**Add the status call** to your `window-status-format` and `window-status-current-format`. Prepend the `#(...)` shell expansion to whatever format string you already have:
+
+```tmux
+set -g window-status-format '#(#{@agent-poke-bin} window-status --window "#{window_id}") #I:#W#{?window_flags,#{window_flags},}'
+set -g window-status-current-format '#(#{@agent-poke-bin} window-status --window "#{window_id}") #I:#W#{?window_flags,#{window_flags},}'
+```
+
+**Add focus hooks** so the indicator resets when you switch to a window. Use `set-hook -g` to set the hook globally, or `set-hook -ag` to _append_ to an existing hook (useful if you already have hooks defined):
+
+```tmux
+set-hook -g pane-focus-in 'run-shell -b "#{@agent-poke-bin} focus-reset"'
+set-hook -g after-select-window 'run-shell -b "#{@agent-poke-bin} focus-reset"'
+set-hook -g after-select-pane 'run-shell -b "#{@agent-poke-bin} focus-reset"'
+```
+
+Then reload:
 
 ```bash
 tmux source-file ~/.tmux.conf
@@ -35,10 +58,7 @@ The hooks tell agent-poke when Claude starts working, asks for permission, or fi
 <details>
 <summary><b>OpenCode</b></summary>
 
-Copy [`examples/opencode-plugin.js`](examples/opencode-plugin.js) to:
-
-- `~/.config/opencode/plugins/agent-poke.js` (global), or
-- `.opencode/plugins/agent-poke.js` (project-local)
+Copy [`examples/opencode-plugin.js`](examples/opencode-plugin.js) to `~/.config/opencode/plugins/agent-poke.js`.
 </details>
 
 <details>

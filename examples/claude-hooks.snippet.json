@@ -119,16 +119,6 @@
           }
         ]
       }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "agent-poke state --agent claude --state needs-input --event Notification"
-          }
-        ]
-      }
     ]
   }
 }
