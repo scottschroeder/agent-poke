@@ -61,18 +61,6 @@ The hooks tell agent-poke when Claude starts working, asks for permission, or fi
 Copy [`examples/opencode-plugin.js`](examples/opencode-plugin.js) to `~/.config/opencode/plugins/agent-poke.js`.
 </details>
 
-<details>
-<summary><b>Codex</b></summary>
-
-Add to `~/.codex/config.toml`:
-
-```toml
-notify = ["bash", "/absolute/path/to/examples/codex-notify.sh"]
-```
-
-See [`examples/codex-notify.sh`](examples/codex-notify.sh) for the adapter script.
-</details>
-
 That's it. Open a tmux window, start your agent, and watch the glyphs appear.
 
 ## Customization

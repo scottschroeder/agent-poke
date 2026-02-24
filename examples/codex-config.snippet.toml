@@ -1,5 +1,0 @@
-# Optional Codex compatibility setup.
-# Point notify at the adapter script in this repository.
-# Use an absolute path that exists on your machine.
-# Codex passes a JSON payload as the first argument.
-notify = ["bash", "/absolute/path/to/agent-poke/examples/codex-notify.sh"]
