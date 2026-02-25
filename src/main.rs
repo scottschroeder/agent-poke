@@ -18,11 +18,7 @@ fn init_logging(verbose: u8) {
 
     if let Ok(log_file) = std::env::var("AGENT_POKE_LOG_FILE") {
         use std::fs::OpenOptions;
-        if let Ok(file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file)
-        {
+        if let Ok(file) = OpenOptions::new().create(true).append(true).open(&log_file) {
             builder.target(env_logger::Target::Pipe(Box::new(file)));
         } else {
             builder.target(env_logger::Target::Pipe(Box::new(std::io::sink())));

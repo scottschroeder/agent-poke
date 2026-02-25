@@ -140,22 +140,34 @@ mod tests {
 
     #[test]
     fn running_missing_heartbeat_uses_now() {
-        assert_eq!(reconcile_pane(&input(AgentState::Running)), ReconcileAction::None);
+        assert_eq!(
+            reconcile_pane(&input(AgentState::Running)),
+            ReconcileAction::None
+        );
     }
 
     #[test]
     fn idle_alive_no_action() {
-        assert_eq!(reconcile_pane(&input(AgentState::Idle)), ReconcileAction::None);
+        assert_eq!(
+            reconcile_pane(&input(AgentState::Idle)),
+            ReconcileAction::None
+        );
     }
 
     #[test]
     fn done_alive_no_action() {
-        assert_eq!(reconcile_pane(&input(AgentState::Done)), ReconcileAction::None);
+        assert_eq!(
+            reconcile_pane(&input(AgentState::Done)),
+            ReconcileAction::None
+        );
     }
 
     #[test]
     fn needs_input_alive_no_action() {
-        assert_eq!(reconcile_pane(&input(AgentState::NeedsInput)), ReconcileAction::None);
+        assert_eq!(
+            reconcile_pane(&input(AgentState::NeedsInput)),
+            ReconcileAction::None
+        );
     }
 
     #[test]

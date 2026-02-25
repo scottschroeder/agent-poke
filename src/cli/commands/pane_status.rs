@@ -4,9 +4,11 @@ use anyhow::Result;
 use clap::Args;
 
 use crate::cli::commands::state_cleanup;
-use crate::config::{DEFAULT_DONE_GLYPH, DEFAULT_IDLE_GLYPH, DEFAULT_NEEDS_INPUT_GLYPH, DEFAULT_RUNNING_GLYPH};
-use crate::core::env_keys;
+use crate::config::{
+    DEFAULT_DONE_GLYPH, DEFAULT_IDLE_GLYPH, DEFAULT_NEEDS_INPUT_GLYPH, DEFAULT_RUNNING_GLYPH,
+};
 use crate::core::AgentState;
+use crate::core::env_keys;
 
 #[derive(Debug, Args)]
 pub struct PaneStatusCommand;
@@ -27,7 +29,10 @@ impl PaneStatusCommand {
             parts.push(format!("{DEFAULT_RUNNING_GLYPH}: {}", counts.running));
         }
         if counts.needs_input > 0 {
-            parts.push(format!("{DEFAULT_NEEDS_INPUT_GLYPH}: {}", counts.needs_input));
+            parts.push(format!(
+                "{DEFAULT_NEEDS_INPUT_GLYPH}: {}",
+                counts.needs_input
+            ));
         }
         if counts.done > 0 {
             parts.push(format!("{DEFAULT_DONE_GLYPH}: {}", counts.done));
@@ -99,7 +104,7 @@ fn parse_state_key(key: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{counts_for_live_panes, parse_state_key, StatusCounts};
+    use super::{StatusCounts, counts_for_live_panes, parse_state_key};
 
     #[test]
     fn parses_only_pane_state_keys() {

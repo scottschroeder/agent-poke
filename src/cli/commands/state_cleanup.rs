@@ -99,8 +99,17 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
         match action {
             ReconcileAction::None => {}
             ReconcileAction::SetClosed => {
-                let reason = if !pane_alive { "pane gone" } else { "process dead" };
-                log::info!("reconcile pane={} {} -> closed ({})", pane_id, state, reason);
+                let reason = if !pane_alive {
+                    "pane gone"
+                } else {
+                    "process dead"
+                };
+                log::info!(
+                    "reconcile pane={} {} -> closed ({})",
+                    pane_id,
+                    state,
+                    reason
+                );
                 set_closed_state(tmux, &pane_id, now_ms)?;
                 touched += 1;
             }
@@ -231,4 +240,3 @@ pub fn prepare_with_maintenance(clear_notifications: bool) -> Result<Option<Tmux
     reconcile_state(&tmux)?;
     Ok(Some(tmux))
 }
-

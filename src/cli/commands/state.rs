@@ -31,12 +31,7 @@ impl StateCommand {
             .state
             .parse::<AgentState>()
             .map_err(anyhow::Error::msg)?;
-        run_state(
-            self.agent,
-            state,
-            self.pane,
-            self.event.as_deref(),
-        )
+        run_state(self.agent, state, self.pane, self.event.as_deref())
     }
 }
 
@@ -101,9 +96,7 @@ fn run_state_impl(
         pane_id,
         previous_state.map(|s| s.as_str()).unwrap_or("None"),
         state,
-        event
-            .map(|e| format!(" event={e}"))
-            .unwrap_or_default(),
+        event.map(|e| format!(" event={e}")).unwrap_or_default(),
     );
 
     let previous_agent = tmux.show_env_global(&pane_keys.agent)?;
