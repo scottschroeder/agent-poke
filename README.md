@@ -22,6 +22,13 @@ There are three pieces to wire up. See [`examples/tmux.conf.snippet`](examples/t
 set -g @agent-poke-bin "$HOME/.cargo/bin/agent-poke"
 ```
 
+**macOS (Homebrew) only:** tmux's `#()` subprocesses inherit a minimal system PATH that doesn't include `/opt/homebrew/bin`. agent-poke calls `tmux` internally, so it needs to know the full path. The `-r` flag prevents the variable from leaking into your interactive shells:
+
+```tmux
+set-environment -g AGENT_POKE_TMUX_BIN "/opt/homebrew/bin/tmux"
+set-environment -r AGENT_POKE_TMUX_BIN
+```
+
 **Add the status call** to your `window-status-format` and `window-status-current-format`. Prepend the `#(...)` shell expansion to whatever format string you already have:
 
 ```tmux

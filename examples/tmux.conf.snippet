@@ -1,6 +1,11 @@
 # status segment
 set -g @agent-poke-bin "$HOME/.cargo/bin/agent-poke"
 
+# macOS (Homebrew) only: tell agent-poke where tmux lives.
+# The -r flag prevents the variable from leaking into interactive shells.
+# set-environment -g AGENT_POKE_TMUX_BIN "/opt/homebrew/bin/tmux"
+# set-environment -r AGENT_POKE_TMUX_BIN
+
 # minimal: prefix each window label with state glyph
 # Add this to your window status format `#(#{@agent-poke-bin} window-status --window "#{window_id}") `
 set -g window-status-format '#(#{@agent-poke-bin} window-status --window "#{window_id}") #I:#W#{?window_flags,#{window_flags},}'

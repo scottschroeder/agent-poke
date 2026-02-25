@@ -1,10 +1,20 @@
 use anyhow::{Context, Result, anyhow};
+use std::ffi::OsString;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Default)]
-pub struct Tmux;
+/// Environment variable that overrides the tmux binary path.
+/// On macOS with Homebrew, tmux's `#()` subprocesses inherit a minimal
+/// system PATH that lacks `/opt/homebrew/bin`, so agent-poke cannot find
+/// the `tmux` binary by name. Set this via `set-environment -g` in
+/// tmux.conf to provide the absolute path.
+const TMUX_BIN_ENV: &str = "AGENT_POKE_TMUX_BIN";
+
+#[derive(Debug)]
+pub struct Tmux {
+    bin: OsString,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaneSummary {
@@ -13,11 +23,16 @@ pub struct PaneSummary {
 
 impl Tmux {
     pub fn new() -> Self {
-        Self
+        let bin = std::env::var_os(TMUX_BIN_ENV).unwrap_or_else(|| OsString::from("tmux"));
+        Self { bin }
+    }
+
+    fn tmux_cmd(&self) -> Command {
+        Command::new(&self.bin)
     }
 
     pub fn is_available(&self) -> bool {
-        Command::new("tmux")
+        self.tmux_cmd()
             .arg("-V")
             .output()
             .map(|output| output.status.success())
@@ -62,7 +77,8 @@ impl Tmux {
     }
 
     pub fn option_is_set_global(&self, option: &str) -> bool {
-        let output = Command::new("tmux")
+        let output = self
+            .tmux_cmd()
             .args(["show-option", "-gq", option])
             .output();
         match output {
@@ -169,7 +185,8 @@ impl Tmux {
     }
 
     fn capture(&self, args: &[&str]) -> Result<String> {
-        let output = Command::new("tmux")
+        let output = self
+            .tmux_cmd()
             .args(args)
             .output()
             .with_context(|| format!("failed to execute tmux with args {args:?}"))?;
@@ -183,7 +200,8 @@ impl Tmux {
     }
 
     fn status(&self, args: &[&str]) -> Result<()> {
-        let output = Command::new("tmux")
+        let output = self
+            .tmux_cmd()
             .args(args)
             .output()
             .with_context(|| format!("failed to execute tmux with args {args:?}"))?;
@@ -197,11 +215,12 @@ impl Tmux {
     }
 
     fn status_ignore_failure(&self, args: &[&str]) {
-        let _ = Command::new("tmux").args(args).output();
+        let _ = self.tmux_cmd().args(args).output();
     }
 
     fn wait_for_lock(&self, key: &str, timeout: Duration) -> Result<bool> {
-        let mut child = Command::new("tmux")
+        let mut child = self
+            .tmux_cmd()
             .args(["wait-for", "-L", key])
             .spawn()
             .with_context(|| format!("failed to execute tmux wait-for lock for key {key}"))?;
