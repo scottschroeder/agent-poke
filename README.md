@@ -68,6 +68,21 @@ The hooks tell agent-poke when Claude starts working, asks for permission, or fi
 Copy [`examples/opencode-plugin.js`](examples/opencode-plugin.js) to `~/.config/opencode/plugins/agent-poke.js`.
 </details>
 
+<details>
+<summary><b>Pi agent harness</b></summary>
+
+Copy [`examples/pi-extension.ts`](examples/pi-extension.ts) to `~/.pi/agent/extensions/agent-poke.ts`.
+
+The extension reports pi sessions as idle, running, done, or closed and sends throttled heartbeats throughout active agent runs. Set `AGENT_POKE_BIN` in the environment where pi starts if `agent-poke` is not on pi's `PATH`:
+
+```bash
+cp examples/pi-extension.ts ~/.pi/agent/extensions/agent-poke.ts
+export AGENT_POKE_BIN="$HOME/.cargo/bin/agent-poke"
+```
+
+Pi does not expose a generic permission-request lifecycle event, so this integration cannot distinguish a permission prompt from a completed run. A Pi UI extension that asks for input can call `agent-poke state --agent pi --state needs-input` and then `agent-poke state --agent pi --state running` after the user responds.
+</details>
+
 That's it. Open a tmux window, start your agent, and watch the glyphs appear.
 
 ## Customization
