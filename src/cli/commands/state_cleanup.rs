@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use anyhow::Result;
 
@@ -9,7 +9,7 @@ use crate::core::reconcile::{PaneReconcileInput, ReconcileAction, reconcile_pane
 use crate::core::stale;
 use crate::core::util::now_epoch_millis;
 use crate::notify;
-use crate::tmux::Tmux;
+use crate::tmux::{PaneInfo, Tmux};
 
 pub fn cleanup_stale_state(tmux: &Tmux, clear_notifications: bool) -> Result<usize> {
     let live_pane_ids: BTreeSet<String> = tmux.list_all_pane_ids()?.into_iter().collect();
@@ -50,37 +50,53 @@ pub fn cleanup_stale_state(tmux: &Tmux, clear_notifications: bool) -> Result<usi
 }
 
 pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
+    // One bulk environment dump and one bulk pane inventory replace the
+    // per-pane `show-environment`/`display-message` round-trips this used to
+    // issue; on a busy server that was hundreds of tmux spawns per call,
+    // and reconcile runs inside every agent-poke command.
     let env_pairs = tmux.show_env_global_all()?;
-    let live_pane_ids: BTreeSet<String> = tmux.list_all_pane_ids()?.into_iter().collect();
+    let env: HashMap<&str, &str> = env_pairs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .filter(|(_, value)| !value.is_empty())
+        .collect();
+    let pane_info = tmux.list_all_pane_info()?;
+    let info_by_id: HashMap<&str, &PaneInfo> = pane_info
+        .iter()
+        .map(|info| (info.pane_id.as_str(), info))
+        .collect();
     let now_ms = now_epoch_millis();
     let closed_retention_ms = config::closed_retention_ms(tmux);
 
+    let mut running_timeout_cache: HashMap<&str, u64> = HashMap::new();
     let mut touched = 0usize;
 
     for pane_id in pane_ids_with_state(&env_pairs) {
         let keys = PaneEnvKeys::new(&pane_id);
-        let Some(raw_state) = tmux.show_env_global(&keys.state)? else {
+        let Some(raw_state) = env.get(keys.state.as_str()) else {
             continue;
         };
         let Ok(state) = raw_state.parse::<AgentState>() else {
             continue;
         };
 
-        let pane_alive = live_pane_ids.contains(&pane_id);
+        let pane_alive = info_by_id.contains_key(pane_id.as_str());
         let process_alive = if pane_alive && state != AgentState::Closed {
-            pane_process_looks_alive(tmux, &pane_id, &keys)?
+            pane_process_looks_alive(tmux, info_by_id.get(pane_id.as_str()).copied(), &env, &keys)
         } else {
             true
         };
-        let closed_ts_ms = tmux
-            .show_env_global(&keys.closed_ts_ms)?
-            .and_then(|v| v.parse::<u64>().ok());
-        let heartbeat_ts_ms = tmux
-            .show_env_global(&keys.last_heartbeat_ts_ms)?
-            .and_then(|v| v.parse::<u64>().ok());
+        let closed_ts_ms = env
+            .get(keys.closed_ts_ms.as_str())
+            .and_then(|value| value.parse::<u64>().ok());
+        let heartbeat_ts_ms = env
+            .get(keys.last_heartbeat_ts_ms.as_str())
+            .and_then(|value| value.parse::<u64>().ok());
         let running_timeout_ms = if state == AgentState::Running {
-            let agent = tmux.show_env_global(&keys.agent)?.unwrap_or_default();
-            config::running_heartbeat_timeout_ms_for_agent(tmux, &agent)
+            let agent = env.get(keys.agent.as_str()).copied().unwrap_or("");
+            *running_timeout_cache
+                .entry(agent)
+                .or_insert_with(|| config::running_heartbeat_timeout_ms_for_agent(tmux, agent))
         } else {
             0
         };
@@ -108,7 +124,7 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
                     "reconcile pane={} {} -> closed ({})",
                     pane_id,
                     state,
-                    reason
+                    reason,
                 );
                 set_closed_state(tmux, &pane_id, now_ms)?;
                 touched += 1;
@@ -122,7 +138,7 @@ pub fn reconcile_state(tmux: &Tmux) -> Result<usize> {
                 touched += 1;
             }
             ReconcileAction::SetIdle => {
-                let agent = tmux.show_env_global(&keys.agent)?.unwrap_or_default();
+                let agent = env.get(keys.agent.as_str()).copied().unwrap_or_default();
                 log::info!(
                     "reconcile pane={} agent={} running -> idle (heartbeat timeout {}ms)",
                     pane_id,
@@ -151,40 +167,45 @@ fn pane_ids_with_state(env_pairs: &[(String, String)]) -> BTreeSet<String> {
         .collect()
 }
 
-fn pane_process_looks_alive(tmux: &Tmux, pane_id: &str, keys: &PaneEnvKeys) -> Result<bool> {
-    let current_pane_pid = tmux.pane_pid(pane_id)?;
-    let current_cmd = tmux.pane_current_command(pane_id)?;
-    let tracked_agent_pid = tmux
-        .show_env_global(&keys.agent_pid)?
+fn pane_process_looks_alive(
+    tmux: &Tmux,
+    info: Option<&PaneInfo>,
+    env: &HashMap<&str, &str>,
+    keys: &PaneEnvKeys,
+) -> bool {
+    let current_pane_pid = info.and_then(|info| info.pid);
+    let current_cmd = info.and_then(|info| info.command.as_deref());
+    let tracked_agent_pid = env
+        .get(keys.agent_pid.as_str())
         .and_then(|value| value.parse::<u32>().ok());
-    let tracked_pane_pid = tmux
-        .show_env_global(&keys.pane_pid_at_start)?
+    let tracked_pane_pid = env
+        .get(keys.pane_pid_at_start.as_str())
         .and_then(|value| value.parse::<u32>().ok());
-    let tracked_cmd = tmux.show_env_global(&keys.pane_cmd_at_start)?;
+    let tracked_cmd = env.get(keys.pane_cmd_at_start.as_str()).copied();
 
     if let Some(agent_pid) = tracked_agent_pid
         && !tmux.pid_is_alive(agent_pid)
     {
-        return Ok(false);
+        return false;
     }
 
     if let (Some(tracked), Some(current)) = (tracked_pane_pid, current_pane_pid)
         && tracked != current
     {
-        return Ok(false);
+        return false;
     }
 
-    if let (Some(tracked), Some(current)) = (tracked_cmd.as_deref(), current_cmd.as_deref())
+    if let (Some(tracked), Some(current)) = (tracked_cmd, current_cmd)
         && tracked != current
     {
-        return Ok(false);
+        return false;
     }
 
     if tracked_agent_pid.is_none() && tracked_pane_pid.is_none() {
-        return Ok(current_pane_pid.is_some());
+        return current_pane_pid.is_some();
     }
 
-    Ok(true)
+    true
 }
 
 pub(crate) fn set_closed_state(tmux: &Tmux, pane_id: &str, now_ms: u64) -> Result<()> {

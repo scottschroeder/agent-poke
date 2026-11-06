@@ -27,17 +27,24 @@ impl WindowStatusCommand {
         };
 
         let glyphs = config::window_status_glyphs(&tmux);
+        // One bulk environment dump instead of a `show-environment` spawn per
+        // pane; this command runs for every window on every status redraw.
+        let env_pairs = tmux.show_env_global_all()?;
+        let state_by_pane: std::collections::HashMap<&str, &str> = env_pairs
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
         let mut has_running = false;
         let mut has_done = false;
         let mut has_needs_input = false;
 
         for pane in tmux.list_panes_in_window(&window_id)? {
             let key = format!("TMUX_AGENT_PANE_{}_STATE", pane.pane_id);
-            let Some(state) = tmux.show_env_global(&key)? else {
+            let Some(state) = state_by_pane.get(key.as_str()) else {
                 continue;
             };
 
-            match state.as_str() {
+            match *state {
                 "needs-input" => has_needs_input = true,
                 "done" => has_done = true,
                 "running" => has_running = true,

@@ -21,6 +21,14 @@ pub struct PaneSummary {
     pub pane_id: String,
 }
 
+/// Full pane snapshot fetched in bulk via [`Tmux::list_all_pane_info`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneInfo {
+    pub pane_id: String,
+    pub pid: Option<u32>,
+    pub command: Option<String>,
+}
+
 impl Tmux {
     pub fn new() -> Self {
         let bin = std::env::var_os(TMUX_BIN_ENV).unwrap_or_else(|| OsString::from("tmux"));
@@ -136,6 +144,36 @@ impl Tmux {
             .collect())
     }
 
+    /// Bulk pane inventory in a single tmux call: id, pid, and current command
+    /// for every pane on the server. Replaces per-pane `display-message`
+    /// round-trips in hot paths (reconcile iterates every pane with state).
+    pub fn list_all_pane_info(&self) -> Result<Vec<PaneInfo>> {
+        let output = self.capture(&[
+            "list-panes",
+            "-a",
+            "-F",
+            "#{pane_id}\t#{pane_pid}\t#{pane_current_command}",
+        ])?;
+
+        let mut panes = Vec::new();
+        for line in output.lines() {
+            let mut fields = line.split('\t');
+            let (Some(pane_id), pid, command) = (fields.next(), fields.next(), fields.next())
+            else {
+                continue;
+            };
+            if pane_id.is_empty() {
+                continue;
+            }
+            panes.push(PaneInfo {
+                pane_id: pane_id.to_owned(),
+                pid: pid.and_then(|pid| pid.parse::<u32>().ok()),
+                command: command.filter(|cmd| !cmd.is_empty()).map(ToOwned::to_owned),
+            });
+        }
+        Ok(panes)
+    }
+
     pub fn pane_pid(&self, pane_id: &str) -> Result<Option<u32>> {
         let raw = self.display_target(pane_id, "#{pane_pid}")?;
         if raw.is_empty() {
@@ -154,11 +192,21 @@ impl Tmux {
     }
 
     pub fn pid_is_alive(&self, pid: u32) -> bool {
-        Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+        // /proc existence check avoids spawning `kill` once per tracked pane;
+        // reconcile walks every pane with state, so this is a hot path.
+        #[cfg(target_os = "linux")]
+        {
+            std::path::Path::new(&format!("/proc/{pid}")).exists()
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false)
+        }
     }
 
     pub fn refresh_client(&self) {
